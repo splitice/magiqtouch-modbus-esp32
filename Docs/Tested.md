@@ -2,8 +2,8 @@
 [Back to Readme](../README.md)
 
 ## Tested and working with:
-- Evaporative Cooler
-- Gas Heater (TQ430N)
+- Evaporative Cooler (Breezair EZQ155)
+- Gas Heater (Braemar TQ430N)
 - 2 Zones
 - 2 Wall Controllers running software revision R719.
  
