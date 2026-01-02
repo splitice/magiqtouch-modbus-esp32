@@ -2,9 +2,10 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 //#include <ArduinoOTA.h>
+#include "NetworkSecret.h"  // Contains ssid and password definitions
 
-const char* ssid = "WiFiNetworkName";      // Change this to your WiFi SSID
-const char* password = "WirelessPasskey123";  // Change this to your WiFi password
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_SECRET;  // Change this to your WiFi password
 
 void LanController::Setup() {
   WiFi.begin(ssid, password);

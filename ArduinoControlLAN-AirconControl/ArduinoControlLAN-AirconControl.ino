@@ -11,7 +11,7 @@
 #include "PinSettings.h"
 
 //Max message size for modbus, reduce due to ram usage.
-#define MAXMSGSIZE 512
+#define MAXMSGSIZE 256
 #define MAXSLAVEID 30
 #define GAPTHRESHOLD 50
 
@@ -21,6 +21,7 @@ HardwareSerial SerialA(1);
 HardwareSerial SerialB(2);
 
 SemaphoreHandle_t msgSemaphore;
+SemaphoreHandle_t txSemaphore;
 
 unsigned long s1previousMillis = 0;
 uint8_t SerialAbuffer[MAXMSGSIZE];
@@ -34,7 +35,7 @@ bool SerialOutputModbus = false;
 
 //Aircon Control Variables.
 bool SystemPower = false;
-uint8_t FanSpeed = 1;
+uint8_t FanSpeed = 5;
 uint8_t SystemMode = 0;
 uint8_t TargetTemp = 20;
 uint8_t TargetTemp2 = 20;
@@ -45,7 +46,7 @@ bool HeaterZone2 = false;
 uint16_t CommandInfo = 0x0;  //Increments on command change from Control Panel.
 uint8_t SystemPowerInfo = 0x0;
 uint8_t EvapModeInfo = 0x0;
-uint8_t EvapFanSpeedInfo = 0x0;
+uint8_t EvapFanSpeedInfo = FanSpeed;
 
 uint8_t HeaterModeInfo = 0x0;
 uint8_t HeaterFanSpeedInfo = 0x0;
@@ -67,6 +68,10 @@ uint8_t x5vl = 0x42;  //Cooler Mode 42 = Off, 02 = On
 uint8_t x6vl = 0x43;  //Evap Fan setting.
 uint8_t x7vl = 0x04;  //Unknown
 uint8_t x8vl = 0x22;  //Heater Fan Settings.
+
+// Some devices don't support the IoT command message. When false, SendCommandMessage()
+// will send a control-panel style command instead.
+bool IOTSupported = false;
 
 uint8_t x10v = 0x24;
 uint8_t x12v = 0x24;
@@ -91,6 +96,9 @@ uint8_t eb1006d80019[] = { 0xEB, 0x10, 0x06, 0xD8, 0x00, 0x19, 0x97, 0xBA };
 uint8_t eb1008e50001[] = { 0xEB, 0x10, 0x08, 0xE5, 0x00, 0x01, 0x04, 0x94 };  //Info from CP1 to IOT for On/Off State.
 uint8_t eb1008e60032[] = { 0xEB, 0x10, 0x08, 0xE6, 0x00, 0x32, 0xB4, 0x81 };  //Main info update from CP1 to IOT module.
 uint8_t eb1008e60032_request[109];
+
+// Control command frame (pre-CRC): 02 10 00 31 00 01 02 00 XX
+static const uint8_t CONTROL_COMMAND_HEADER[] = { 0x02, 0x10, 0x00, 0x31, 0x00, 0x01, 0x02, 0x00 };
 
 String jsonstring;
 StaticJsonDocument<4096> hvacJson;
@@ -172,14 +180,61 @@ void unlockVariable() {
   xSemaphoreGive(msgSemaphore);
 }
 
+static inline void ApplySystemMode(uint8_t newMode) {
+  SystemMode = newMode;
+
+  // Keep EvapModeInfo consistent with SystemMode (unless heat).
+  if (newMode == 4) {
+    return;
+  }
+
+  uint8_t evapModeNibble;
+  switch (newMode) {
+    case 0:  // Fan - External
+      evapModeNibble = 0x09;
+      break;
+    case 2:  // Cooler - Manual
+      evapModeNibble = 0x05;
+      break;
+    case 3:  // Cooler - Auto
+      evapModeNibble = 0x07;
+      break;
+    default:
+      return;
+  }
+
+  EvapModeInfo = (EvapModeInfo & 0xF0) | (evapModeNibble & 0x0F);
+}
+
+static inline void lockTx() {
+  if (txSemaphore != NULL) {
+    xSemaphoreTake(txSemaphore, portMAX_DELAY);
+  }
+}
+
+static inline void unlockTx() {
+  if (txSemaphore != NULL) {
+    xSemaphoreGive(txSemaphore);
+  }
+}
+
+static const uint8_t PERIODIC_FRAME_WITH_CRC[] = { 0x8D, 0x10, 0x00, 0x6E, 0x00, 0x01, 0x02, 0x00, 0x00, 0x9A, 0x18 };
+
+void PeriodicFrameTask(void* parameter);
+
 void setup() {
   Serial.begin(9600);
   Serial.println("OK");
   //Set Serial, Baud Rate, 8 bit no parity, RX,TX
   SerialA.begin(9600, SERIAL_8N1, SERIAL1_RX, SERIAL1_TX);
+  Serial2.setPins(SERIAL2_RX, SERIAL2_TX);
   SerialB.begin(9600, SERIAL_8N1, SERIAL2_RX, SERIAL2_TX);
+  
+  pinMode(RS485_EN, OUTPUT);
+  digitalWrite(RS485_EN, LOW);
 
   msgSemaphore = xSemaphoreCreateMutex();
+  txSemaphore = xSemaphoreCreateMutex();
 
   //Prefill messages used for webserver.
   memset(eb1008e60032_request, 0, 109);
@@ -190,6 +245,15 @@ void setup() {
   LanController::Setup();
 
   xTaskCreate(WebServerTask, "WebServerTask", 16384, NULL, 1, NULL);
+
+  // Send the fixed frame (including fixed CRC) every 5 seconds.
+  xTaskCreate(PeriodicFrameTask, "PeriodicFrameTask", 4096, NULL, 1, NULL);
+}
+
+static void debug(const char* msg) {
+    if (SerialOutputModbus) {
+      Serial.println("Failed to send reply to command - no body received.");
+    }
 }
 
 
@@ -209,6 +273,17 @@ void WebServerTask(void* parameter) {
   }
 }
 
+void PeriodicFrameTask(void* parameter) {
+  (void)parameter;
+  while (true) {
+    // CRC is fixed and included in the frame.
+    //SendMessage((uint8_t*)PERIODIC_FRAME_WITH_CRC, sizeof(PERIODIC_FRAME_WITH_CRC), false);
+    SendCommandControl();
+    
+    vTaskDelay(pdMS_TO_TICKS(5000));
+  }
+}
+
 
 void ModbusRelayLoop(void* parameter) {
   while (true) {
@@ -220,7 +295,16 @@ void ModbusRelayLoop(void* parameter) {
 void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, uint8_t* buffer, int& index, unsigned long& previousMillis, int serialPort) {
   while (inputSerial.available()) {
     uint8_t incomingByte = inputSerial.read();
-    outputSerial.write(incomingByte);
+
+    // log incoming byte to serial monitor
+    //if (SerialOutputModbus) {
+    //  Serial.print("Serial ");
+    //  Serial.print(serialPort);
+    //  Serial.print(" Received Byte: ");
+    //  Serial.println(incomingByte, HEX);
+    //}
+
+    //outputSerial.write(incomingByte);
 
     // Gap Threshold of time between last byte, mark as message complete.
     unsigned long currentMillis = millis();
@@ -297,11 +381,13 @@ void webCommandResponse() {
     lockVariable();
     if (body.indexOf("power=on") != -1) {  // Check if "D1" is in the body
       SystemPower = true;
+      SystemPowerInfo = true;
       if (SerialOutputModbus) {
         Serial.println("System Power set to True");
       }
     } else if (body.indexOf("power=off") != -1) {
       SystemPower = false;
+      SystemPowerInfo = false;
       if (SerialOutputModbus) {
         Serial.println("System Power set to false");
       }
@@ -338,6 +424,7 @@ void webCommandResponse() {
       int number = body.substring(9).toInt();
       if (number >= 1 && number <= 10) {
         FanSpeed = number;
+        EvapFanSpeedInfo = number;
       }
       if (SerialOutputModbus) {
         Serial.println("Fan speed set to " + String(FanSpeed));
@@ -346,7 +433,7 @@ void webCommandResponse() {
     } else if (body.startsWith("mode=")) {
       int number = body.substring(5).toInt();
       if (number >= 0 && number <= 5) {
-        SystemMode = number;
+        ApplySystemMode((uint8_t)number);
       }
       if (SerialOutputModbus) {
         Serial.println("System mode set to " + String(SystemMode));
@@ -371,6 +458,8 @@ void webCommandResponse() {
     sendCommand = true;  //Force command update
     unlockVariable();
 
+    SendCommandMessage();
+
     server.send(200, "text/plain", "OK");
   } else {
     server.send(400, "text/plain", "No body received.");
@@ -388,11 +477,14 @@ bool ProcessMessage(uint8_t msgBuffer[], int msgLength, int SerialID) {
   uint16_t crcraw = (msgBuffer[msgLength - 2] << 8 | msgBuffer[msgLength - 1]);
   uint16_t expectedcrc = modbusCRC(msgBuffer, msgLength - 2);
   if (crcraw == expectedcrc) {
+    //Seperate Processing functions for each message source/destination.
+
     if (SerialOutputModbus) {
-      SerialPrintMessage(msgBuffer, msgLength, SerialID);
+      SerialPrintMessage("Received: ", msgBuffer, msgLength, SerialID);
     }
 
-    //Seperate Processing functions for each message source/destination.
+    // Update local application state from control-style commands.
+    ControlCommandProcess(msgBuffer, msgLength);
 
     IoTModuleMessageProcess(msgBuffer, msgLength);  //IOT Module
     //EvapInfoUpdate(msgBuffer, msgLength); //Evap Unit
@@ -403,6 +495,28 @@ bool ProcessMessage(uint8_t msgBuffer[], int msgLength, int SerialID) {
     return true;
   }
   return false;
+}
+
+void ControlCommandProcess(uint8_t* msgBuffer, int msgLength) {
+  // Expected full frame length including CRC: 11 bytes
+  // 02 10 00 31 00 01 02 00 XX CRC_HI CRC_LO
+  if (msgLength != 11) {
+    return;
+  }
+  if (!checkPattern(msgBuffer, (uint8_t*)CONTROL_COMMAND_HEADER, sizeof(CONTROL_COMMAND_HEADER))) {
+    return;
+  }
+
+  const uint8_t xx = msgBuffer[8];
+  const uint8_t newFanSpeed = (uint8_t)(xx >> 4);
+  const bool coolerMode = (xx & 0x02) != 0;
+  const uint8_t newSystemMode = coolerMode ? 2 : 0;
+
+  lockVariable();
+  FanSpeed = newFanSpeed;
+  EvapFanSpeedInfo = newFanSpeed;
+  ApplySystemMode(newSystemMode);
+  unlockVariable(); 
 }
 
 
@@ -426,6 +540,7 @@ void Panel1Info(uint8_t* msgBuffer, int msgLength) {
 
 void Panel2Info(uint8_t* msgBuffer, int msgLength) {
   if (msgLength != 7) {
+
     return;
   }
 
@@ -438,8 +553,8 @@ void Panel2Info(uint8_t* msgBuffer, int msgLength) {
   }
 }
 
-void SerialPrintMessage(uint8_t* msgBuffer, int msgLength, int SerialID) {
-  Serial.print("S");
+void SerialPrintMessage(const char* start, uint8_t* msgBuffer, int msgLength, int SerialID) {
+  Serial.print(start);
   Serial.print(SerialID);
   Serial.print(" ");
   for (int i = 0; i < (msgLength - 2); i++) {
@@ -576,6 +691,11 @@ void UpdateCommandMessage() {
 
 void SendCommandMessage() {
 
+  if (!IOTSupported) {
+    SendCommandControl();
+    return;
+  }
+
   UpdateCommandMessage();
 
   if (sendCommand) {
@@ -598,6 +718,22 @@ void SendCommandMessage() {
     0x00, 0x00, 0x00, 0x00, 0x00
   };  //length is 29
   SendMessage(IOTCommandMessage, 29, true);
+}
+
+void SendCommandControl() {
+  // Format: 2 2 10 0 31 0 1 2 0 XX YY YY
+  // Where XX = (FanSpeed * 16) + 2 if in cooler mode, YY YY is CRC.
+  const bool coolerMode = (SystemMode == 2) || (SystemMode == 3);
+  uint8_t xx = (uint8_t)(FanSpeed << 4);
+  if (coolerMode) {
+    xx = (uint8_t)(xx + 2);
+  }
+  if(!SystemPower) {
+    xx = 0x00; //Power off command.
+  }
+
+  uint8_t controlMsg[] = { 0x02, 0x10, 0x00, 0x31, 0x00, 0x01, 0x02, 0x00, xx };
+  SendMessage(controlMsg, 9, true);
 }
 
 void SetXVal(uint8_t* val, uint8_t newVal) {
@@ -750,9 +886,16 @@ bool checkPattern(uint8_t* msgBuffer, uint8_t* checkpattern, int checklength) {
 }
 
 void SendMessage(uint8_t* msgBuffer, int length, bool sendcrc) {
+  lockTx();
   if (SerialOutputModbus) {
-    SerialPrintMessage(msgBuffer, length, 0);
+    SerialPrintMessage("OUT: ", msgBuffer, length, 0);
   }
+  
+  
+  digitalWrite(RS485_EN, HIGH);   // enable transmitter
+
+  delayMicroseconds(500);   // enable settle (5–50us typical)
+
   for (uint8_t i = 0; i < length; i++) {
     SerialA.write(msgBuffer[i]);
     SerialB.write(msgBuffer[i]);
@@ -765,7 +908,21 @@ void SendMessage(uint8_t* msgBuffer, int length, bool sendcrc) {
     SerialB.write(highByte);
     SerialA.write(lowByte);
     SerialB.write(lowByte);
+
+    
+    if (SerialOutputModbus) {
+      SerialPrintMessage("CRC: ", (uint8_t*)&crcval, 2, 0);
+    }
   }
+
+  SerialA.flush();
+  SerialB.flush();  
+
+  delayMicroseconds(5000);   // last-bit -> disable guard
+
+  digitalWrite(RS485_EN, LOW);    // back to receive
+
+  unlockTx();
 }
 
 

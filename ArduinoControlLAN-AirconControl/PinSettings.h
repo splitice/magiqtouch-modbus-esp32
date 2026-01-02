@@ -2,3 +2,4 @@
 #define SERIAL1_TX 27
 #define SERIAL2_RX 16
 #define SERIAL2_TX 17
+#define RS485_EN 18
