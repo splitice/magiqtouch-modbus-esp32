@@ -17,6 +17,8 @@
 
 WebServer server(80);
 
+TaskHandle_t commandSendTaskHandle = nullptr;
+
 HardwareSerial SerialA(1);
 HardwareSerial SerialB(2);
 
@@ -261,6 +263,22 @@ void loop() {
   vTaskDelay(100);
 }
 
+static void TriggerCommandSend() {
+  if (commandSendTaskHandle != nullptr) {
+    xTaskNotifyGive(commandSendTaskHandle);
+  }
+}
+
+void CommandSendTask(void* parameter) {
+  (void)parameter;
+  while (true) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    // Coalesce bursts of web commands.
+    vTaskDelay(pdMS_TO_TICKS(10));
+    SendCommandMessage();
+  }
+}
+
 void WebServerTask(void* parameter) {
   server.on("/", HTTP_GET, webRootResponse);
   server.on("/command", HTTP_POST, webCommandResponse);
@@ -331,41 +349,61 @@ void relaySerial(HardwareSerial& inputSerial, HardwareSerial& outputSerial, uint
 
 
 void webRootResponse() {
+  // Snapshot state quickly; don't hold the mutex while formatting JSON.
+  uint16_t commandInfo;
+  uint8_t systemPowerInfo;
+  uint8_t systemMode;
+  uint8_t targetTempInfo;
+  uint8_t targetTemp2Info;
+  uint8_t evapModeInfo;
+  uint8_t evapFanSpeedInfo;
+  uint8_t heaterModeInfo;
+  uint8_t heaterFanSpeedInfo;
+  uint8_t thermisterTempInfo;
+  uint8_t zone1EnabledInfo;
+  uint8_t zone2EnabledInfo;
+  uint8_t zone1TempInfo;
+  uint8_t zone2TempInfo;
+  uint8_t automaticCleanRunning;
+  uint8_t eb1008Snapshot[109];
+
   lockVariable();
+  commandInfo = CommandInfo;
+  systemPowerInfo = SystemPowerInfo;
+  systemMode = SystemMode;
+  targetTempInfo = TargetTempInfo;
+  targetTemp2Info = TargetTemp2Info;
+  evapModeInfo = EvapModeInfo;
+  evapFanSpeedInfo = EvapFanSpeedInfo;
+  heaterModeInfo = HeaterModeInfo;
+  heaterFanSpeedInfo = HeaterFanSpeedInfo;
+  thermisterTempInfo = ThermisterTempInfo;
+  zone1EnabledInfo = Zone1EnabledInfo;
+  zone2EnabledInfo = Zone2EnabledInfo;
+  zone1TempInfo = Zone1TempInfo;
+  zone2TempInfo = Zone2TempInfo;
+  automaticCleanRunning = AutomaticCleanRunning;
+  memcpy(eb1008Snapshot, eb1008e60032_request, sizeof(eb1008Snapshot));
+  unlockVariable();
 
   hvacJson.clear();
   hvacJson["module_name"] = "ESP32-HVAC-Control";
   hvacJson["uptime"] = getUptimeFormatted();
-  hvacJson["system_power"] = SystemPowerInfo;
-  hvacJson["system_mode"] = SystemMode;
-  hvacJson["target_temp"] = TargetTempInfo;
-  hvacJson["target_temp_zone2"] = TargetTemp2Info;
-  hvacJson["evap_mode"] = EvapModeInfo;
-  hvacJson["evap_fanspeed"] = EvapFanSpeedInfo;
-  hvacJson["heater_mode"] = HeaterModeInfo;
-  hvacJson["heater_fanspeed"] = HeaterFanSpeedInfo;
-  hvacJson["heater_therm_temp"] = ThermisterTempInfo;
-  hvacJson["heater_zone1_enabled"] = Zone1EnabledInfo;
-  hvacJson["heater_zone2_enabled"] = Zone2EnabledInfo;
-  hvacJson["zone1_temp_sensor"] = Zone1TempInfo;
-  hvacJson["zone2_temp_sensor"] = Zone2TempInfo;
-  hvacJson["panel_command_count"] = CommandInfo;
-  hvacJson["automatic_clean_running"] = AutomaticCleanRunning;
-
-  char eb1008char[109 * 4];
-  eb1008char[0] = '\0';  // Initialize the string as empty
-  for (size_t i = 0; i < 109; i++) {
-    char buffer[4];
-    sprintf(buffer, "%u", eb1008e60032_request[i]);
-    strcat(eb1008char, buffer);
-    if (i < 109 - 1) {
-      strcat(eb1008char, ",");
-    }
-  }
-  hvacJson["eb1008e60032_cp1data"] = eb1008char;
-
-
-  unlockVariable();
+  hvacJson["system_power"] = systemPowerInfo;
+  hvacJson["system_mode"] = systemMode;
+  hvacJson["target_temp"] = targetTempInfo;
+  hvacJson["target_temp_zone2"] = targetTemp2Info;
+  hvacJson["evap_mode"] = evapModeInfo;
+  hvacJson["evap_fanspeed"] = evapFanSpeedInfo;
+  hvacJson["heater_mode"] = heaterModeInfo;
+  hvacJson["heater_fanspeed"] = heaterFanSpeedInfo;
+  hvacJson["heater_therm_temp"] = thermisterTempInfo;
+  hvacJson["heater_zone1_enabled"] = zone1EnabledInfo;
+  hvacJson["heater_zone2_enabled"] = zone2EnabledInfo;
+  hvacJson["zone1_temp_sensor"] = zone1TempInfo;
+  hvacJson["zone2_temp_sensor"] = zone2TempInfo;
+  hvacJson["panel_command_count"] = commandInfo;
+  hvacJson["automatic_clean_running"] = automaticCleanRunning;
 
   serializeJsonPretty(hvacJson, jsonstring);
   server.send(200, "application/json", jsonstring);
@@ -458,7 +496,8 @@ void webCommandResponse() {
     sendCommand = true;  //Force command update
     unlockVariable();
 
-    SendCommandMessage();
+    // Sending on RS485 can block; trigger it asynchronously so HTTP stays snappy
+    TriggerCommandSend();
 
     server.send(200, "text/plain", "OK");
   } else {
@@ -918,7 +957,7 @@ void SendMessage(uint8_t* msgBuffer, int length, bool sendcrc) {
   SerialA.flush();
   SerialB.flush();  
 
-  delayMicroseconds(5000);   // last-bit -> disable guard
+  delayMicroseconds(1024);   // last-bit -> disable guard
 
   digitalWrite(RS485_EN, LOW);    // back to receive
 
