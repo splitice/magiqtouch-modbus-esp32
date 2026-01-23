@@ -305,12 +305,12 @@ void WebServerTask(void* parameter) {
 void PeriodicFrameTask(void* parameter) {
   (void)parameter;
   while (true) {
-    // Update drain mode logic
-    UpdateDrainMode();
+    // Update drain mode logic and get current state
+    bool drainActive = UpdateDrainMode();
     
     // CRC is fixed and included in the frame.
     //SendMessage((uint8_t*)PERIODIC_FRAME_WITH_CRC, sizeof(PERIODIC_FRAME_WITH_CRC), false);
-    SendCommandControl();
+    SendCommandControl(drainActive);
     
     vTaskDelay(pdMS_TO_TICKS(5000));
   }
@@ -804,7 +804,7 @@ void SendCommandMessage() {
   SendMessage(IOTCommandMessage, 29, true);
 }
 
-void UpdateDrainMode() {
+bool UpdateDrainMode() {
   lockVariable();
   
   unsigned long currentTime = millis();
@@ -820,11 +820,9 @@ void UpdateDrainMode() {
   LastSystemMode = SystemMode;
   
   // Check if drain mode should be automatically triggered
-  bool autoDrainTriggered = false;
   if (LastCoolModeEndTime != 0 && !DrainModeActive) {
     unsigned long timeSinceCooling = currentTime - LastCoolModeEndTime;
     if (timeSinceCooling >= COOL_TRANSITION_TO_DRAIN) {
-      autoDrainTriggered = true;
       DrainModeActive = true;
       DrainModeStartTime = currentTime;
       LastCoolModeEndTime = 0;  // Reset to prevent re-triggering
@@ -855,24 +853,23 @@ void UpdateDrainMode() {
     }
   }
   
+  bool drainActive = DrainModeActive;
   unlockVariable();
+  
+  return drainActive;
 }
 
-void SendCommandControl() {
+void SendCommandControl(bool drainActive) {
   // Format: 2 2 10 0 31 0 1 2 0 XX YY YY
   // Where XX = (FanSpeed * 16) + 2 if in cooler mode, YY YY is CRC.
   // Drain mode uses FanSpeed + 1 (which becomes (FanSpeed+1) * 16 in the upper nibble)
   
-  lockVariable();
-  bool drainActive = DrainModeActive;
-  unlockVariable();
-  
   const bool coolerMode = (SystemMode == 2) || (SystemMode == 3);
   uint8_t effectiveFanSpeed = FanSpeed;
   
-  // Drain mode: use fan speed + 1
+  // Drain mode: use fan speed + 1, but cap at 10 to prevent overflow
   if (drainActive) {
-    effectiveFanSpeed = FanSpeed + 1;
+    effectiveFanSpeed = (FanSpeed < 10) ? (FanSpeed + 1) : 10;
   }
   
   uint8_t xx = (uint8_t)(effectiveFanSpeed << 4);
