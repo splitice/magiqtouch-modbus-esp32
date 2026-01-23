@@ -211,9 +211,9 @@ namespace ModBusLogger
                             string[] linedatasplit = linedata.Trim().Split(' ');
                             try
                             {
-                                curMsg.serialport = linedatasplit[0]; //serial port
-                                curMsg.SlaveID = Convert.ToInt32(linedatasplit[1], 16);
-                                curMsg.FunctionCode = Convert.ToInt32(linedatasplit[2], 16);
+                                curMsg.serialport = linedatasplit[1]; //serial port
+                                curMsg.SlaveID = Convert.ToInt32(linedatasplit[2], 16);
+                                curMsg.FunctionCode = Convert.ToInt32(linedatasplit[3], 16);
                             }
                             catch (Exception ex)
                             {

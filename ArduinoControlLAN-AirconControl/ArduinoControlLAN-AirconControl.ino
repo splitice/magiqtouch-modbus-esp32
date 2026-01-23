@@ -505,7 +505,7 @@ void webCommandResponse() {
       }
     } else if (body.startsWith("fanspeed=")) {
       int number = body.substring(9).toInt();
-      if (number >= 1 && number <= 10) {
+      if (number >= 0 && number <= 10) {
         FanSpeed = number;
         EvapFanSpeedInfo = number;
       }
@@ -870,17 +870,16 @@ void SendCommandControl(bool drainActive) {
   const bool coolerMode = (SystemMode == 2) || (SystemMode == 3);
   uint8_t effectiveFanSpeed = FanSpeed;
   
-  // Drain mode: use fan speed + 1, but cap at 10 to prevent overflow
-  if (drainActive) {
-    effectiveFanSpeed = (FanSpeed < 10) ? (FanSpeed + 1) : 10;
-  }
-  
   uint8_t xx = (uint8_t)(effectiveFanSpeed << 4);
   if (coolerMode || drainActive) {
     xx = (uint8_t)(xx + 2);
   }
-  if(!SystemPower && !drainActive) {
+  if(!SystemPower) {
     xx = 0x00; //Power off command (but not during drain)
+  }
+
+  if(drainActive) {
+    xx += 1;
   }
 
   uint8_t controlMsg[] = { 0x02, 0x10, 0x00, 0x31, 0x00, 0x01, 0x02, 0x00, xx };
