@@ -776,7 +776,10 @@ void UpdateCommandMessage() {
 void SendCommandMessage() {
 
   if (!IOTSupported) {
-    SendCommandControl();
+    lockVariable();
+    bool drainActive = DrainModeActive;
+    unlockVariable();
+    SendCommandControl(drainActive);
     return;
   }
 
