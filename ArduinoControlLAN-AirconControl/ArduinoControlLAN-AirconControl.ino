@@ -870,11 +870,6 @@ void SendCommandControl(bool drainActive) {
   const bool coolerMode = (SystemMode == 2) || (SystemMode == 3);
   uint8_t effectiveFanSpeed = FanSpeed;
   
-  // Drain mode: use fan speed + 1, but cap at 10 to prevent overflow
-  if (drainActive) {
-    effectiveFanSpeed = (FanSpeed < 10) ? (FanSpeed + 1) : 10;
-  }
-  
   uint8_t xx = (uint8_t)(effectiveFanSpeed << 4);
   if (coolerMode || drainActive) {
     xx = (uint8_t)(xx + 2);

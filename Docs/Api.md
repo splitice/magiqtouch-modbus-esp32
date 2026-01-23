@@ -59,7 +59,6 @@ The drain mode feature automatically runs a 2-minute drain cycle after the cooli
 **Automatic Operation:**
 - When the cooling system (mode 2 or 3) is turned off, a 24-hour timer begins
 - If cooling is not reactivated within 24 hours, drain mode automatically runs for 2 minutes
-- Drain mode uses a fan speed of current fan speed + 1 to help evaporate residual moisture
 
 **Manual Control:**
 - Send `drain=on` to immediately start a drain cycle
