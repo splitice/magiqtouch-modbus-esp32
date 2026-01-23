@@ -35,6 +35,10 @@ int SerialBIndex = 0;
 
 bool SerialOutputModbus = false;
 
+//Drain Mode Configuration (times in milliseconds)
+#define DRAIN_TIME (2 * 60 * 1000UL)  // 2 minutes default
+#define COOL_TRANSITION_TO_DRAIN (24 * 60 * 60 * 1000UL)  // 24 hours default
+
 //Aircon Control Variables.
 bool SystemPower = false;
 uint8_t FanSpeed = 5;
@@ -43,6 +47,13 @@ uint8_t TargetTemp = 20;
 uint8_t TargetTemp2 = 20;
 bool HeaterZone1 = false;
 bool HeaterZone2 = false;
+
+//Drain Mode Variables
+bool DrainModeManual = false;  // Manual drain mode trigger
+bool DrainModeActive = false;  // Currently running drain mode
+unsigned long LastCoolModeEndTime = 0;  // When cooling last ended (0 = never)
+unsigned long DrainModeStartTime = 0;  // When drain cycle started
+uint8_t LastSystemMode = 0;  // Track previous system mode
 
 //Aircon Info Variables.
 uint16_t CommandInfo = 0x0;  //Increments on command change from Control Panel.
@@ -294,6 +305,9 @@ void WebServerTask(void* parameter) {
 void PeriodicFrameTask(void* parameter) {
   (void)parameter;
   while (true) {
+    // Update drain mode logic
+    UpdateDrainMode();
+    
     // CRC is fixed and included in the frame.
     //SendMessage((uint8_t*)PERIODIC_FRAME_WITH_CRC, sizeof(PERIODIC_FRAME_WITH_CRC), false);
     SendCommandControl();
@@ -366,6 +380,9 @@ void webRootResponse() {
   uint8_t zone2TempInfo;
   uint8_t automaticCleanRunning;
   uint8_t eb1008Snapshot[109];
+  bool drainModeActive;
+  unsigned long drainTimeRemaining = 0;
+  unsigned long timeUntilNextDrain = 0;
 
   lockVariable();
   commandInfo = CommandInfo;
@@ -384,6 +401,18 @@ void webRootResponse() {
   zone2TempInfo = Zone2TempInfo;
   automaticCleanRunning = AutomaticCleanRunning;
   memcpy(eb1008Snapshot, eb1008e60032_request, sizeof(eb1008Snapshot));
+  
+  // Drain mode status
+  drainModeActive = DrainModeActive;
+  unsigned long currentTime = millis();
+  if (drainModeActive) {
+    unsigned long elapsed = currentTime - DrainModeStartTime;
+    drainTimeRemaining = (elapsed < DRAIN_TIME) ? (DRAIN_TIME - elapsed) : 0;
+  }
+  if (LastCoolModeEndTime != 0 && !drainModeActive) {
+    unsigned long elapsed = currentTime - LastCoolModeEndTime;
+    timeUntilNextDrain = (elapsed < COOL_TRANSITION_TO_DRAIN) ? (COOL_TRANSITION_TO_DRAIN - elapsed) : 0;
+  }
   unlockVariable();
 
   hvacJson.clear();
@@ -404,6 +433,11 @@ void webRootResponse() {
   hvacJson["zone2_temp_sensor"] = zone2TempInfo;
   hvacJson["panel_command_count"] = commandInfo;
   hvacJson["automatic_clean_running"] = automaticCleanRunning;
+  
+  // Drain mode status
+  hvacJson["drain_mode_active"] = drainModeActive;
+  hvacJson["drain_time_remaining_ms"] = drainTimeRemaining;
+  hvacJson["time_until_next_drain_ms"] = timeUntilNextDrain;
 
   serializeJsonPretty(hvacJson, jsonstring);
   server.send(200, "application/json", jsonstring);
@@ -458,6 +492,17 @@ void webCommandResponse() {
     } else if (body.indexOf("serial=off") != -1) {
       SerialOutputModbus = false;
       Serial.println("Serial Output Disabled");
+    } else if (body.indexOf("drain=on") != -1) {
+      DrainModeManual = true;
+      if (SerialOutputModbus) {
+        Serial.println("Manual drain mode triggered");
+      }
+    } else if (body.indexOf("drain=off") != -1) {
+      DrainModeActive = false;
+      DrainModeManual = false;
+      if (SerialOutputModbus) {
+        Serial.println("Drain mode cancelled");
+      }
     } else if (body.startsWith("fanspeed=")) {
       int number = body.substring(9).toInt();
       if (number >= 1 && number <= 10) {
@@ -759,16 +804,83 @@ void SendCommandMessage() {
   SendMessage(IOTCommandMessage, 29, true);
 }
 
+void UpdateDrainMode() {
+  lockVariable();
+  
+  unsigned long currentTime = millis();
+  
+  // Track when cooling mode ends
+  if ((LastSystemMode == 2 || LastSystemMode == 3) && SystemMode != 2 && SystemMode != 3) {
+    // Just exited cooling mode
+    LastCoolModeEndTime = currentTime;
+    if (SerialOutputModbus) {
+      Serial.println("Cooling mode ended, drain timer started");
+    }
+  }
+  LastSystemMode = SystemMode;
+  
+  // Check if drain mode should be automatically triggered
+  bool autoDrainTriggered = false;
+  if (LastCoolModeEndTime != 0 && !DrainModeActive) {
+    unsigned long timeSinceCooling = currentTime - LastCoolModeEndTime;
+    if (timeSinceCooling >= COOL_TRANSITION_TO_DRAIN) {
+      autoDrainTriggered = true;
+      DrainModeActive = true;
+      DrainModeStartTime = currentTime;
+      LastCoolModeEndTime = 0;  // Reset to prevent re-triggering
+      if (SerialOutputModbus) {
+        Serial.println("Auto-drain mode activated after 24-hour idle period");
+      }
+    }
+  }
+  
+  // Manual drain trigger
+  if (DrainModeManual && !DrainModeActive) {
+    DrainModeActive = true;
+    DrainModeStartTime = currentTime;
+    DrainModeManual = false;  // Reset manual flag
+    if (SerialOutputModbus) {
+      Serial.println("Manual drain mode activated");
+    }
+  }
+  
+  // Check if drain mode should end
+  if (DrainModeActive) {
+    unsigned long drainElapsed = currentTime - DrainModeStartTime;
+    if (drainElapsed >= DRAIN_TIME) {
+      DrainModeActive = false;
+      if (SerialOutputModbus) {
+        Serial.println("Drain mode completed");
+      }
+    }
+  }
+  
+  unlockVariable();
+}
+
 void SendCommandControl() {
   // Format: 2 2 10 0 31 0 1 2 0 XX YY YY
   // Where XX = (FanSpeed * 16) + 2 if in cooler mode, YY YY is CRC.
+  // Drain mode uses FanSpeed + 1 (which becomes (FanSpeed+1) * 16 in the upper nibble)
+  
+  lockVariable();
+  bool drainActive = DrainModeActive;
+  unlockVariable();
+  
   const bool coolerMode = (SystemMode == 2) || (SystemMode == 3);
-  uint8_t xx = (uint8_t)(FanSpeed << 4);
-  if (coolerMode) {
+  uint8_t effectiveFanSpeed = FanSpeed;
+  
+  // Drain mode: use fan speed + 1
+  if (drainActive) {
+    effectiveFanSpeed = FanSpeed + 1;
+  }
+  
+  uint8_t xx = (uint8_t)(effectiveFanSpeed << 4);
+  if (coolerMode || drainActive) {
     xx = (uint8_t)(xx + 2);
   }
-  if(!SystemPower) {
-    xx = 0x00; //Power off command.
+  if(!SystemPower && !drainActive) {
+    xx = 0x00; //Power off command (but not during drain)
   }
 
   uint8_t controlMsg[] = { 0x02, 0x10, 0x00, 0x31, 0x00, 0x01, 0x02, 0x00, xx };
