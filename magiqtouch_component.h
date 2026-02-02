@@ -1048,8 +1048,8 @@ class MagiqTouchClimate : public climate::Climate, public Component {
     if (this->rs485_en_pin_ != nullptr) {
       this->rs485_en_pin_->digital_write(true);
       // RS485 transceiver enable settling time (50us is within typical 5-50us range
-      // for common transceivers like MAX485, MAX3485, SP485, etc.)
-      // This blocking delay is necessary for proper RS485 timing
+      // for common transceivers like MAX485, MAX3485, SP485, etc.).
+      // This blocking delay is necessary for proper RS485 timing.
       delayMicroseconds(50);
     }
     
