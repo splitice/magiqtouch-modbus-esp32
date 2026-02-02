@@ -14,13 +14,8 @@ esphome:
   comment: "MagIQTouch Modbus HVAC Controller - ESPHome Edition"
   platformio_options:
     board_build.flash_mode: dio
-  
-  # NOTE: This configuration is a FRAMEWORK/TEMPLATE
-  # A custom C++ component is needed to implement the MagIQTouch Modbus protocol.
-  # See ESPHome-Status.md for details on implementation status.
-  # 
-  # For a working solution today, use the Arduino firmware in ArduinoControlLAN-AirconControl/
-  # with the Home Assistant integration: https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha
+  includes:
+    - magiqtouch_component.h
 
 esp32:
   board: esp32dev
@@ -86,14 +81,163 @@ uart:
     # debug:
     #   direction: BOTH
 
-# Interval-based components
-interval:
-  - interval: 5s
-    then:
+# Custom MagiqTouch Climate Component
+climate:
+  - platform: custom
+    lambda: |-
+      auto magiqtouch_climate = new esphome::magiqtouch::MagiqTouchClimate();
+      magiqtouch_climate->set_uart_panel(id(uart_panel));
+      magiqtouch_climate->set_uart_unit(id(uart_unit));
+      
+      // Configure RS485 enable pin
+      auto *rs485_pin = new GPIOPin();
+      rs485_pin->set_pin(GPIO${rs485_en_pin});
+      rs485_pin->set_flags(gpio::FLAG_OUTPUT);
+      rs485_pin->setup();
+      magiqtouch_climate->set_rs485_enable_pin(rs485_pin);
+      
+      App.register_component(magiqtouch_climate);
+      return {magiqtouch_climate};
+    climates:
+      - name: "${friendly_name}"
+        id: magiqtouch_hvac
+
+# Sensors from the MagiqTouch system
+sensor:
+  - platform: template
+    name: "${friendly_name} Command Info"
+    id: command_info_sensor
+    icon: "mdi:counter"
+    accuracy_decimals: 0
+  
+  - platform: template
+    name: "${friendly_name} Evap Fan Speed"
+    id: evap_fan_speed_sensor
+    icon: "mdi:fan"
+    accuracy_decimals: 0
+  
+  - platform: template
+    name: "${friendly_name} Heater Fan Speed"
+    id: heater_fan_speed_sensor
+    icon: "mdi:fan"
+    accuracy_decimals: 0
+  
+  - platform: template
+    name: "${friendly_name} Zone 1 Temperature"
+    id: zone1_temp_sensor
+    device_class: temperature
+    unit_of_measurement: "°C"
+    accuracy_decimals: 0
+  
+  - platform: template
+    name: "${friendly_name} Zone 2 Temperature"
+    id: zone2_temp_sensor
+    device_class: temperature
+    unit_of_measurement: "°C"
+    accuracy_decimals: 0
+  
+  - platform: template
+    name: "${friendly_name} Thermister Temperature"
+    id: thermister_temp_sensor
+    device_class: temperature
+    unit_of_measurement: "°C"
+    accuracy_decimals: 0
+  
+  - platform: template
+    name: "${friendly_name} Target Temp Zone 2"
+    id: target_temp2_sensor
+    device_class: temperature
+    unit_of_measurement: "°C"
+    accuracy_decimals: 0
+
+binary_sensor:
+  - platform: template
+    name: "${friendly_name} Zone 1 Enabled"
+    id: zone1_enabled_sensor
+    icon: "mdi:radiator"
+  
+  - platform: template
+    name: "${friendly_name} Zone 2 Enabled"
+    id: zone2_enabled_sensor
+    icon: "mdi:radiator"
+  
+  - platform: template
+    name: "${friendly_name} Drain Mode Active"
+    id: drain_mode_active_sensor
+    icon: "mdi:water-pump"
+  
+  - platform: template
+    name: "${friendly_name} Automatic Clean"
+    id: automatic_clean_sensor
+    icon: "mdi:broom"
+
+text_sensor:
+  - platform: template
+    name: "${friendly_name} System Mode"
+    id: system_mode_sensor
+    icon: "mdi:air-conditioner"
+
+# Additional controls for zone management and drain mode
+switch:
+  - platform: template
+    name: "${friendly_name} Zone 1"
+    id: zone1_switch
+    icon: "mdi:radiator"
+    turn_on_action:
       - lambda: |-
-          // Placeholder for periodic tasks
-          // In full implementation, this would handle drain mode timing
-          // and periodic status updates
+          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
+          climate->set_zone1(true);
+    turn_off_action:
+      - lambda: |-
+          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
+          climate->set_zone1(false);
+  
+  - platform: template
+    name: "${friendly_name} Zone 2"
+    id: zone2_switch
+    icon: "mdi:radiator"
+    turn_on_action:
+      - lambda: |-
+          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
+          climate->set_zone2(true);
+    turn_off_action:
+      - lambda: |-
+          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
+          climate->set_zone2(false);
+
+button:
+  - platform: template
+    name: "${friendly_name} Trigger Drain Mode"
+    id: drain_mode_button
+    icon: "mdi:water-pump"
+    on_press:
+      - lambda: |-
+          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
+          climate->trigger_drain_mode();
+  
+  - platform: template
+    name: "${friendly_name} Cancel Drain Mode"
+    id: cancel_drain_button
+    icon: "mdi:water-pump-off"
+    on_press:
+      - lambda: |-
+          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
+          climate->cancel_drain_mode();
+
+number:
+  - platform: template
+    name: "${friendly_name} Target Temp Zone 2"
+    id: target_temp2_number
+    icon: "mdi:thermometer"
+    min_value: 10
+    max_value: 28
+    step: 1
+    mode: slider
+    unit_of_measurement: "°C"
+    set_action:
+      - lambda: |-
+          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
+          climate->set_target_temp2((uint8_t)x);
 
 # Status LED (optional - adjust pin as needed)
 # status_led:
