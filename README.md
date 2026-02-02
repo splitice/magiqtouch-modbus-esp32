@@ -3,11 +3,6 @@
 This project is an alternative to the official WiFi Module for the MagiqTouch system.  
 It provides local access and control with a simple [REST API](Docs/Api.md).
 
-# MagIQTouch Modbus
-
-This project is an alternative to the official WiFi Module for the MagiqTouch system.  
-It provides local access and control with a simple [REST API](Docs/Api.md).
-
 ## 🚀 Quick Start
 
 ### Arduino Firmware (Production-Ready - Recommended)
