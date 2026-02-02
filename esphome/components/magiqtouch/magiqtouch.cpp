@@ -297,11 +297,17 @@ void MagiqTouchComponent::update_sensors() {
   if (this->system_mode_sensor_ != nullptr) {
     const char *mode_text = "Unknown";
     switch (this->system_mode_) {
-      case 0: mode_text = "Fan External"; break;
-      case 1: mode_text = "Fan Recycle"; break;
-      case 2: mode_text = "Cooler Manual"; break;
-      case 3: mode_text = "Cooler Auto"; break;
-      case 4: mode_text = "Heater"; break;
+      case 0:
+      case 1:
+        mode_text = "fan_only";
+        break;
+      case 2:
+      case 3:
+        mode_text = "cool";
+        break;
+      case 4:
+        mode_text = "heat"; 
+        break;
     }
     this->system_mode_sensor_->publish_state(mode_text);
   }
