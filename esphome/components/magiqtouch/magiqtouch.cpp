@@ -157,6 +157,21 @@ void MagiqTouchComponent::set_mode_by_name(const std::string &mode_name) {
   this->send_command_control(this->drain_mode_active_);
 }
 
+std::string MagiqTouchComponent::get_mode_name() const {
+  if (!this->system_power_) {
+    return "off";
+  }
+  
+  // Map numeric mode to mode name
+  if (this->system_mode_ <= 1) {
+    return "fan_only";  // Fan External (0) or Fan Recycle (1)
+  } else if (this->system_mode_ <= 3) {
+    return "cool";  // Cooler Manual (2) or Cooler Auto (3)
+  } else {
+    return "heat";  // Heater (4)
+  }
+}
+
 void MagiqTouchComponent::trigger_drain_mode() {
   ESP_LOGI(TAG, "Drain mode triggered manually");
   this->drain_mode_manual_ = true;

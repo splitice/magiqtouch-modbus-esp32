@@ -304,6 +304,87 @@ select:
 - `set_mode_by_name(string)` - Set mode using strings: "off", "fan_only", "cool", "heat"
 - `set_fan_speed_str(string)` - Set fan speed using strings: "1" to "10" (useful for select entities)
 
+#### Reading Current State
+
+You can read the current system state using getter methods in lambda expressions:
+
+```yaml
+# Read current fan speed
+sensor:
+  - platform: template
+    name: "${friendly_name} Current Fan Speed"
+    lambda: |-
+      auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+      return controller->get_fan_speed();
+    update_interval: 5s
+
+# Read current mode as text
+text_sensor:
+  - platform: template
+    name: "${friendly_name} Current Mode"
+    lambda: |-
+      auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+      return controller->get_mode_name();
+    update_interval: 5s
+
+# Read power state
+binary_sensor:
+  - platform: template
+    name: "${friendly_name} Power State"
+    lambda: |-
+      auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+      return controller->get_power();
+    update_interval: 5s
+
+# Synchronized mode select (shows current value)
+select:
+  - platform: template
+    name: "${friendly_name} Mode Control"
+    options:
+      - "off"
+      - "fan_only"
+      - "cool"
+      - "heat"
+    lambda: |-
+      auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+      return controller->get_mode_name();
+    set_action:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_mode_by_name(x);
+    update_interval: 5s
+
+# Synchronized fan speed select (shows current value)
+select:
+  - platform: template
+    name: "${friendly_name} Fan Speed Control"
+    options:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+      - "6"
+      - "7"
+      - "8"
+      - "9"
+      - "10"
+    lambda: |-
+      auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+      return to_string(controller->get_fan_speed());
+    set_action:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_fan_speed_str(x);
+    update_interval: 5s
+```
+
+**Available getter methods:**
+- `get_fan_speed()` - Returns current fan speed (0-10)
+- `get_mode()` - Returns current mode number (0-4)
+- `get_mode_name()` - Returns current mode as string ("off", "fan_only", "cool", "heat")
+- `get_power()` - Returns power state (true/false)
+
 ### 2. Secrets File (secrets.yaml)
 
 Create a file named `secrets.yaml` in the same directory:

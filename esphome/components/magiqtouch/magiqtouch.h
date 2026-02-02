@@ -38,8 +38,11 @@ class MagiqTouchComponent : public Component, public uart::UARTDevice {
   void set_fan_speed_str(const std::string &speed_str);
   uint8_t get_fan_speed() const { return this->fan_speed_; }
   void set_power(bool power);
+  bool get_power() const { return this->system_power_; }
   void set_mode(uint8_t mode);
+  uint8_t get_mode() const { return this->system_mode_; }
   void set_mode_by_name(const std::string &mode_name);
+  std::string get_mode_name() const;
   void trigger_drain_mode();
   void cancel_drain_mode();
 
