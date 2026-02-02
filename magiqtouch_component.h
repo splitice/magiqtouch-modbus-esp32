@@ -871,7 +871,8 @@ class MagiqTouchClimate : public climate::Climate, public Component {
     // Enable RS485 transmitter
     if (this->rs485_en_pin_ != nullptr) {
       this->rs485_en_pin_->digital_write(true);
-      // RS485 transceiver enable settling time (reduced to 50us, within datasheet range)
+      // RS485 transceiver enable settling time (50us is within typical 5-50us range
+      // for common transceivers like MAX485, MAX3485, SP485, etc.)
       // This blocking delay is necessary for proper RS485 timing
       delayMicroseconds(50);
     }
@@ -900,7 +901,7 @@ class MagiqTouchClimate : public climate::Climate, public Component {
     
     // RS485 guard time: ensure last byte fully transmits before disabling
     // At 9600 baud, 8N1: (total_bytes * 10 bits * 1000000 us) / 9600 baud
-    // Simplified: total_bytes * 1042 microseconds, rounded up for safety
+    // = ~1041.67 microseconds per byte, rounded up for safety
     uint32_t guard_time_us = (total_bytes * 10 * 1000000 + 9599) / 9600;
     delayMicroseconds(guard_time_us);
     
