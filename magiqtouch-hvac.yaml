@@ -10,8 +10,6 @@ esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
   comment: "MagIQTouch Modbus HVAC Controller - ESPHome Edition"
-  platformio_options:
-    board_build.flash_mode: dio
 
 esp32:
   board: esp32dev
@@ -50,8 +48,15 @@ captive_portal:
 web_server:
   port: 80
   version: 2
-  include_internal: true
-  ota: false
+
+# External components - load magiqtouch from GitHub
+external_components:
+  - source:
+      type: git
+      url: https://github.com/splitice/magiqtouch-modbus-esp32
+      ref: main
+    components: [magiqtouch]
+    refresh: 0s
 
 # Single UART Configuration for RS485 Modbus network
 uart:
@@ -63,37 +68,17 @@ uart:
     parity: NONE
     stop_bits: 1
 
-# MagiqTouch Climate Component
-climate:
-  - platform: magiqtouch
-    name: "${friendly_name}"
-    id: magiqtouch_hvac
-    uart_id: uart_modbus
-    rs485_enable_pin: GPIO${rs485_en_pin}
-    zone1_temp_sensor: zone1_temp_sensor
-    zone2_temp_sensor: zone2_temp_sensor
-    thermistor_temp_sensor: thermistor_temp_sensor
-    zone1_enabled_sensor: zone1_enabled_sensor
-    zone2_enabled_sensor: zone2_enabled_sensor
-    drain_mode_active_sensor: drain_mode_active_sensor
-    system_mode_sensor: system_mode_sensor
+# MagiqTouch Component (simplified - no climate)
+magiqtouch:
+  id: magiqtouch_controller
+  uart_id: uart_modbus
+  rs485_enable_pin: GPIO${rs485_en_pin}
+  thermistor_temp_sensor: thermistor_temp_sensor
+  drain_mode_active_sensor: drain_mode_active_sensor
+  system_mode_sensor: system_mode_sensor
 
 # Sensors from the MagiqTouch system
 sensor:
-  - platform: template
-    name: "${friendly_name} Zone 1 Temperature"
-    id: zone1_temp_sensor
-    device_class: temperature
-    unit_of_measurement: "°C"
-    accuracy_decimals: 0
-  
-  - platform: template
-    name: "${friendly_name} Zone 2 Temperature"
-    id: zone2_temp_sensor
-    device_class: temperature
-    unit_of_measurement: "°C"
-    accuracy_decimals: 0
-  
   - platform: template
     name: "${friendly_name} Thermistor Temperature"
     id: thermistor_temp_sensor
@@ -101,154 +86,84 @@ sensor:
     unit_of_measurement: "°C"
     accuracy_decimals: 0
 
+# Binary sensors
 binary_sensor:
-  - platform: template
-    name: "${friendly_name} Zone 1 Enabled"
-    id: zone1_enabled_sensor
-    icon: "mdi:radiator"
-  
-  - platform: template
-    name: "${friendly_name} Zone 2 Enabled"
-    id: zone2_enabled_sensor
-    icon: "mdi:radiator"
-  
   - platform: template
     name: "${friendly_name} Drain Mode Active"
     id: drain_mode_active_sensor
-    icon: "mdi:water-pump"
 
+# Text sensors
 text_sensor:
   - platform: template
     name: "${friendly_name} System Mode"
     id: system_mode_sensor
-    icon: "mdi:air-conditioner"
 
-# Control switches for zones
-switch:
-  - platform: template
-    name: "${friendly_name} Zone 1"
-    id: zone1_switch
-    icon: "mdi:radiator"
-    turn_on_action:
-      - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->set_zone1(true);
-    turn_off_action:
-      - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->set_zone1(false);
-  
-  - platform: template
-    name: "${friendly_name} Zone 2"
-    id: zone2_switch
-    icon: "mdi:radiator"
-    turn_on_action:
-      - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->set_zone2(true);
-    turn_off_action:
-      - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->set_zone2(false);
-
-# Control buttons for all commands (replaces HTTP API)
+# Control Buttons
 button:
-  # Power controls
   - platform: template
     name: "${friendly_name} Power ON"
-    id: power_on_button
-    icon: "mdi:power"
     on_press:
       - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->set_power(true);
+          id(magiqtouch_controller)->set_power(true);
   
   - platform: template
     name: "${friendly_name} Power OFF"
-    id: power_off_button
-    icon: "mdi:power-off"
     on_press:
       - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->set_power(false);
+          id(magiqtouch_controller)->set_power(false);
   
-  # Mode controls
   - platform: template
     name: "${friendly_name} Mode: Fan External"
-    id: mode_fan_ext_button
-    icon: "mdi:fan"
     on_press:
       - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->set_mode(0);
+          id(magiqtouch_controller)->set_mode(0);
   
   - platform: template
     name: "${friendly_name} Mode: Fan Recycle"
-    id: mode_fan_recycle_button
-    icon: "mdi:fan"
     on_press:
       - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->set_mode(1);
+          id(magiqtouch_controller)->set_mode(1);
   
   - platform: template
     name: "${friendly_name} Mode: Cooler Manual"
-    id: mode_cooler_manual_button
-    icon: "mdi:snowflake"
     on_press:
       - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->set_mode(2);
+          id(magiqtouch_controller)->set_mode(2);
   
   - platform: template
     name: "${friendly_name} Mode: Cooler Auto"
-    id: mode_cooler_auto_button
-    icon: "mdi:snowflake-thermometer"
     on_press:
       - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->set_mode(3);
+          id(magiqtouch_controller)->set_mode(3);
   
   - platform: template
     name: "${friendly_name} Mode: Heater"
-    id: mode_heater_button
-    icon: "mdi:fire"
     on_press:
       - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->set_mode(4);
+          id(magiqtouch_controller)->set_mode(4);
   
-  # Drain mode controls
   - platform: template
     name: "${friendly_name} Trigger Drain Mode"
-    id: drain_mode_button
-    icon: "mdi:water-pump"
     on_press:
       - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->trigger_drain_mode();
+          id(magiqtouch_controller)->trigger_drain_mode();
   
   - platform: template
     name: "${friendly_name} Cancel Drain Mode"
-    id: cancel_drain_button
-    icon: "mdi:water-pump-off"
     on_press:
       - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->cancel_drain_mode();
+          id(magiqtouch_controller)->cancel_drain_mode();
 
-# Fan speed control (0-10)
+# Number controls
 number:
   - platform: template
     name: "${friendly_name} Fan Speed"
-    id: fan_speed_number
-    icon: "mdi:fan"
+    id: fan_speed_control
     min_value: 0
     max_value: 10
     step: 1
-    mode: slider
+    initial_value: 5
     optimistic: true
     set_action:
       - lambda: |-
-          auto climate = (esphome::magiqtouch::MagiqTouchClimate*)id(magiqtouch_hvac);
-          climate->set_fan_speed((uint8_t)x);
+          id(magiqtouch_controller)->set_fan_speed((uint8_t)x);

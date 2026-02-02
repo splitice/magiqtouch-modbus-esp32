@@ -1,6 +1,6 @@
 {
   "name": "MagIQTouch Modbus",
   "codeowners": ["@splitice"],
-  "dependencies": ["climate", "uart", "sensor", "binary_sensor", "text_sensor"],
+  "dependencies": ["uart", "sensor", "binary_sensor", "text_sensor"],
   "requirements": []
 }

@@ -13,7 +13,7 @@ static const uint8_t table_crc_hi[] = {
   0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
   0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
   0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1,
-  0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41,
+  0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41,
   0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1,
   0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
   0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
@@ -65,408 +65,237 @@ static const uint8_t table_crc_lo[] = {
   0x43, 0x83, 0x41, 0x81, 0x80, 0x40
 };
 
-void MagiqTouchClimate::setup() {
-  // Set up climate traits
-  this->traits_.set_supports_current_temperature(true);
-  this->traits_.set_supports_two_point_target_temperature(false);
-  this->traits_.set_visual_min_temperature(10);
-  this->traits_.set_visual_max_temperature(28);
-  this->traits_.set_visual_temperature_step(1);
-  
-  // Supported modes
-  this->traits_.set_supported_modes({
-    climate::CLIMATE_MODE_OFF,
-    climate::CLIMATE_MODE_FAN_ONLY,
-    climate::CLIMATE_MODE_COOL,
-    climate::CLIMATE_MODE_HEAT,
-  });
-  
-  // Supported fan modes
-  this->traits_.set_supported_fan_modes({
-    climate::CLIMATE_FAN_LOW,
-    climate::CLIMATE_FAN_MEDIUM,
-    climate::CLIMATE_FAN_HIGH,
-    climate::CLIMATE_FAN_AUTO,
-  });
-  
-  // Restore state from flash
-  auto restore = this->restore_state_();
-  if (restore.has_value()) {
-    restore->apply(this);
+void MagiqTouchComponent::setup() {
+  if (this->rs485_en_pin_ != nullptr) {
+    this->rs485_en_pin_->setup();
+    this->rs485_en_pin_->digital_write(false);  // Receiving mode by default
   }
   
-  ESP_LOGD(TAG, "MagiqTouch Climate component setup complete");
+  ESP_LOGD(TAG, "MagIQTouch component setup complete");
 }
 
-void MagiqTouchClimate::loop() {
-  uint32_t now = millis();
-  
-  // Process UART data
+void MagiqTouchComponent::loop() {
+  // Process incoming UART data
   this->process_uart();
   
-  // Update drain mode (called periodically in loop)
-  if (now - this->last_drain_update_ > 1000) {  // Check every second
-    this->update_drain_mode();
-    this->last_drain_update_ = now;
-  }
+  // Update drain mode logic
+  this->update_drain_mode();
   
-  // Send periodic command (every 5 seconds)
-  if (now - this->last_command_send_ > 5000) {
+  // Send control commands periodically (every 500ms)
+  uint32_t current_millis = millis();
+  if (current_millis - this->last_command_send_ >= 500) {
     this->send_command_control(this->drain_mode_active_);
-    this->last_command_send_ = now;
+    this->last_command_send_ = current_millis;
   }
 }
 
-climate::ClimateTraits MagiqTouchClimate::traits() {
-  return this->traits_;
+void MagiqTouchComponent::set_fan_speed(uint8_t speed) {
+  ESP_LOGD(TAG, "Setting fan speed to %d", speed);
+  this->fan_speed_ = speed;
 }
 
-void MagiqTouchClimate::control(const climate::ClimateCall &call) {
-  if (call.get_mode().has_value()) {
-    climate::ClimateMode mode = *call.get_mode();
-    
-    switch (mode) {
-      case climate::CLIMATE_MODE_OFF:
-        this->system_power_ = false;
-        break;
-      case climate::CLIMATE_MODE_FAN_ONLY:
-        this->system_power_ = true;
-        this->system_mode_ = 0;  // Fan - External
-        break;
-      case climate::CLIMATE_MODE_COOL:
-        this->system_power_ = true;
-        this->system_mode_ = 2;  // Cooler - Manual
-        break;
-      case climate::CLIMATE_MODE_HEAT:
-        this->system_power_ = true;
-        this->system_mode_ = 4;  // Heater
-        break;
-      default:
-        break;
-    }
-    
-    this->mode = mode;
-  }
-  
-  if (call.get_target_temperature().has_value()) {
-    this->target_temp_ = (uint8_t)*call.get_target_temperature();
-    this->target_temperature = *call.get_target_temperature();
-  }
-  
-  if (call.get_fan_mode().has_value()) {
-    climate::ClimateFanMode fan_mode = *call.get_fan_mode();
-    
-    switch (fan_mode) {
-      case climate::CLIMATE_FAN_LOW:
-        this->fan_speed_ = 3;
-        break;
-      case climate::CLIMATE_FAN_MEDIUM:
-        this->fan_speed_ = 6;
-        break;
-      case climate::CLIMATE_FAN_HIGH:
-        this->fan_speed_ = 9;
-        break;
-      case climate::CLIMATE_FAN_AUTO:
-        this->fan_speed_ = 5;
-        break;
-      default:
-        break;
-    }
-    
-    this->fan_mode = fan_mode;
-  }
-  
-  // Trigger command send immediately
-  this->send_command_control(this->drain_mode_active_);
-  
-  this->publish_state();
-}
-
-void MagiqTouchClimate::set_zone1(bool enabled) {
-  ESP_LOGI(TAG, "Zone 1 %s", enabled ? "ON" : "OFF");
-  this->heater_zone1_ = enabled;
-  if (this->zone1_enabled_sensor_ != nullptr) {
-    this->zone1_enabled_sensor_->publish_state(enabled);
-  }
-}
-
-void MagiqTouchClimate::set_zone2(bool enabled) {
-  ESP_LOGI(TAG, "Zone 2 %s", enabled ? "ON" : "OFF");
-  this->heater_zone2_ = enabled;
-  if (this->zone2_enabled_sensor_ != nullptr) {
-    this->zone2_enabled_sensor_->publish_state(enabled);
-  }
-}
-
-void MagiqTouchClimate::set_fan_speed(uint8_t speed) {
-  if (speed >= 0 && speed <= 10) {
-    ESP_LOGI(TAG, "Fan speed set to %d", speed);
-    this->fan_speed_ = speed;
-    this->send_command_control(this->drain_mode_active_);
-  }
-}
-
-void MagiqTouchClimate::set_power(bool power) {
-  ESP_LOGI(TAG, "System power %s", power ? "ON" : "OFF");
+void MagiqTouchComponent::set_power(bool power) {
+  ESP_LOGD(TAG, "Setting power to %s", power ? "ON" : "OFF");
   this->system_power_ = power;
-  this->send_command_control(this->drain_mode_active_);
-  this->publish_state();
 }
 
-void MagiqTouchClimate::set_mode(uint8_t mode) {
-  if (mode >= 0 && mode <= 5) {
-    ESP_LOGI(TAG, "System mode set to %d", mode);
-    this->system_mode_ = mode;
-    this->send_command_control(this->drain_mode_active_);
-    this->publish_state();
-  }
-}
-
-void MagiqTouchClimate::trigger_drain_mode() {
-  this->drain_mode_manual_ = true;
-  ESP_LOGI(TAG, "Manual drain mode triggered");
-}
-
-void MagiqTouchClimate::cancel_drain_mode() {
-  this->drain_mode_active_ = false;
-  this->drain_mode_manual_ = false;
-  ESP_LOGI(TAG, "Drain mode cancelled");
-}
-
-void MagiqTouchClimate::process_uart() {
-  if (this->uart_ == nullptr) return;
+void MagiqTouchComponent::set_mode(uint8_t mode) {
+  ESP_LOGD(TAG, "Setting mode to %d", mode);
+  this->system_mode_ = mode;
   
-  while (this->uart_->available()) {
-    uint8_t incoming_byte;
-    this->uart_->read_byte(&incoming_byte);
+  // Track when cooling mode ends for drain mode automation
+  if (this->last_system_mode_ == 2 && mode != 2) {  // Exiting cool mode
+    this->last_cool_mode_end_time_ = millis();
+  }
+  this->last_system_mode_ = mode;
+}
+
+void MagiqTouchComponent::trigger_drain_mode() {
+  ESP_LOGI(TAG, "Drain mode triggered manually");
+  this->drain_mode_manual_ = true;
+  this->drain_mode_active_ = true;
+  this->drain_mode_start_time_ = millis();
+  this->update_sensors();
+}
+
+void MagiqTouchComponent::cancel_drain_mode() {
+  ESP_LOGI(TAG, "Drain mode cancelled");
+  this->drain_mode_manual_ = false;
+  this->drain_mode_active_ = false;
+  this->update_sensors();
+}
+
+void MagiqTouchComponent::process_uart() {
+  uint32_t current_millis = millis();
+  
+  while (this->available()) {
+    uint8_t byte;
+    this->read_byte(&byte);
     
-    // Gap threshold - mark message complete
-    uint32_t current_millis = millis();
-    if (this->serial_index_ > 0 && current_millis - this->previous_millis_ > GAPTHRESHOLD) {
-      this->serial_index_ = 0;
+    // Check for gap (message boundary)
+    if (current_millis - this->previous_millis_ > GAPTHRESHOLD) {
+      this->serial_index_ = 0;  // Reset buffer on gap
     }
     this->previous_millis_ = current_millis;
     
-    if (this->serial_index_ == MAXMSGSIZE) {
-      ESP_LOGW(TAG, "Buffer limit reached on UART");
+    // Add byte to buffer
+    if (this->serial_index_ < MAXMSGSIZE) {
+      this->serial_buffer_[this->serial_index_++] = byte;
+    } else {
+      ESP_LOGW(TAG, "Serial buffer overflow");
       this->serial_index_ = 0;
     }
     
-    // Save byte to buffer
-    this->serial_buffer_[this->serial_index_++] = incoming_byte;
-    if (this->process_message(this->serial_buffer_, this->serial_index_)) {
-      this->serial_index_ = 0;
+    // Try to process message if we have enough bytes
+    if (this->serial_index_ >= 8) {  // Minimum message size
+      if (this->process_message(this->serial_buffer_, this->serial_index_)) {
+        this->serial_index_ = 0;  // Message processed, reset buffer
+      }
     }
   }
 }
 
-bool MagiqTouchClimate::process_message(uint8_t *msg_buffer, int msg_length) {
-  if (msg_length < 4) {
-    return false;
-  }
-  
-  // CRC validation
-  uint16_t crc_raw = (msg_buffer[msg_length - 2] << 8 | msg_buffer[msg_length - 1]);
-  uint16_t expected_crc = this->modbus_crc(msg_buffer, msg_length - 2);
-  
-  if (crc_raw == expected_crc) {
-    ESP_LOGV(TAG, "Valid message received, length %d", msg_length);
+bool MagiqTouchComponent::process_message(uint8_t *msg_buffer, int msg_length) {
+  // Check for control command pattern (0x02 0x10...)
+  if (msg_length >= 11 && msg_buffer[0] == 0x02 && msg_buffer[1] == 0x10) {
+    // Verify CRC
+    uint16_t received_crc = (msg_buffer[msg_length - 1] << 8) | msg_buffer[msg_length - 2];
+    uint16_t calculated_crc = this->modbus_crc(msg_buffer, msg_length - 2);
     
-    // Log message bytes for debugging
-    if (esp_log_level_get(TAG) >= ESP_LOG_VERBOSE) {
-      char hex_str[256];
-      int offset = 0;
-      for (int i = 0; i < msg_length && offset < 250; i++) {
-        offset += snprintf(hex_str + offset, sizeof(hex_str) - offset, "%02X ", msg_buffer[i]);
-      }
-      ESP_LOGV(TAG, "Message data: %s", hex_str);
+    if (received_crc == calculated_crc) {
+      ESP_LOGV(TAG, "Valid control message received");
+      this->control_command_process(msg_buffer, msg_length);
+      return true;
+    } else {
+      ESP_LOGW(TAG, "CRC mismatch: expected 0x%04X, got 0x%04X", calculated_crc, received_crc);
     }
-    
-    // Process control command messages only (no IoT module support)
-    this->control_command_process(msg_buffer, msg_length);
-    
-    return true;
-  } else {
-    ESP_LOGW(TAG, "CRC mismatch: got 0x%04X, expected 0x%04X", crc_raw, expected_crc);
   }
   
   return false;
 }
 
-void MagiqTouchClimate::control_command_process(uint8_t *msg_buffer, int msg_length) {
-  if (msg_length != 11) {
-    return;
-  }
+void MagiqTouchComponent::control_command_process(uint8_t *msg_buffer, int msg_length) {
+  if (msg_length < 11) return;
   
-  if (!this->check_pattern(msg_buffer, CONTROL_COMMAND_HEADER, sizeof(CONTROL_COMMAND_HEADER))) {
-    return;
-  }
+  // Extract control data (bytes 7-8 contain the control payload)
+  uint8_t control_byte = msg_buffer[8];
   
-  const uint8_t xx = msg_buffer[8];
-  const uint8_t new_fan_speed = (uint8_t)(xx >> 4);
-  const bool cooler_mode = (xx & 0x02) != 0;
-  const uint8_t new_system_mode = cooler_mode ? 2 : 0;
+  // Parse system state from control byte
+  // Bits: [7:power] [6-4:mode] [3-0:fan_speed]
+  bool power = (control_byte & 0x80) != 0;
+  uint8_t mode = (control_byte >> 4) & 0x07;
+  uint8_t fan = control_byte & 0x0F;
   
-  this->fan_speed_ = new_fan_speed;
-  this->system_mode_ = new_system_mode;
+  ESP_LOGD(TAG, "Received state - Power: %s, Mode: %d, Fan: %d", 
+           power ? "ON" : "OFF", mode, fan);
   
-  ESP_LOGD(TAG, "Control command: fan=%d, cooler=%d", new_fan_speed, cooler_mode);
+  // Update internal state
+  this->system_power_ = power;
+  this->system_mode_ = mode;
+  this->fan_speed_ = fan;
   
   // Update sensors
   this->update_sensors();
 }
 
-void MagiqTouchClimate::update_drain_mode() {
-  uint32_t current_time = millis();
+void MagiqTouchComponent::update_drain_mode() {
+  uint32_t current_millis = millis();
   
-  // Track when cooling mode ends
-  if ((this->last_system_mode_ == 2 || this->last_system_mode_ == 3) && 
-      this->system_mode_ != 2 && this->system_mode_ != 3) {
-    // Just exited cooling mode
-    this->last_cool_mode_end_time_ = current_time;
-    ESP_LOGI(TAG, "Cooling mode ended, drain timer started");
-  }
-  this->last_system_mode_ = this->system_mode_;
-  
-  // Check if drain mode should be automatically triggered
-  if (this->last_cool_mode_end_time_ != 0 && !this->drain_mode_active_) {
-    uint32_t time_since_cooling = current_time - this->last_cool_mode_end_time_;
-    if (time_since_cooling >= COOL_TRANSITION_TO_DRAIN) {
+  // Auto-trigger drain mode 24h after leaving cool mode
+  if (!this->drain_mode_active_ && !this->drain_mode_manual_) {
+    if (this->last_cool_mode_end_time_ > 0 && 
+        current_millis - this->last_cool_mode_end_time_ >= COOL_TRANSITION_TO_DRAIN) {
+      ESP_LOGI(TAG, "Auto-triggering drain mode (24h after cool mode)");
       this->drain_mode_active_ = true;
-      this->drain_mode_start_time_ = current_time;
-      this->last_cool_mode_end_time_ = 0;  // Reset to prevent re-triggering
-      ESP_LOGI(TAG, "Auto-drain mode activated after 24-hour idle period");
+      this->drain_mode_start_time_ = current_millis;
+      this->update_sensors();
     }
   }
   
-  // Manual drain trigger
-  if (this->drain_mode_manual_ && !this->drain_mode_active_) {
-    this->drain_mode_active_ = true;
-    this->drain_mode_start_time_ = current_time;
-    this->drain_mode_manual_ = false;  // Reset manual flag
-    ESP_LOGI(TAG, "Manual drain mode activated");
-  }
-  
-  // Check if drain mode should end
+  // End drain mode after 2 minutes
   if (this->drain_mode_active_) {
-    uint32_t drain_elapsed = current_time - this->drain_mode_start_time_;
-    if (drain_elapsed >= DRAIN_TIME) {
+    if (current_millis - this->drain_mode_start_time_ >= DRAIN_TIME) {
+      ESP_LOGI(TAG, "Drain mode complete");
       this->drain_mode_active_ = false;
-      ESP_LOGI(TAG, "Drain mode completed");
+      this->drain_mode_manual_ = false;
+      this->update_sensors();
     }
-  }
-  
-  // Update drain mode sensor
-  if (this->drain_mode_active_sensor_ != nullptr) {
-    this->drain_mode_active_sensor_->publish_state(this->drain_mode_active_);
   }
 }
 
-void MagiqTouchClimate::send_command_control(bool drain_active) {
-  // Control command format: 02 10 00 31 00 01 02 00 XX YY YY
-  // Where XX = (FanSpeed * 16) + modifiers
+void MagiqTouchComponent::send_command_control(bool drain_active) {
+  uint8_t command[11];
   
-  const bool cooler_mode = (this->system_mode_ == 2) || (this->system_mode_ == 3);
-  uint8_t effective_fan_speed = this->fan_speed_;
+  // Copy command header
+  memcpy(command, CONTROL_COMMAND_HEADER, 8);
   
-  uint8_t xx = (uint8_t)(effective_fan_speed << 4);
-  if (cooler_mode || drain_active) {
-    xx = (uint8_t)(xx + 2);
-  }
-  if (!this->system_power_) {
-    xx = 0x00;  // Power off command
-  }
-  if (drain_active) {
-    xx += 1;
-  }
+  // Build control byte
+  uint8_t control_byte = 0;
+  if (this->system_power_) control_byte |= 0x80;
+  control_byte |= (this->system_mode_ & 0x07) << 4;
+  control_byte |= (this->fan_speed_ & 0x0F);
   
-  uint8_t control_msg[] = { 0x02, 0x10, 0x00, 0x31, 0x00, 0x01, 0x02, 0x00, xx };
-  this->send_message(control_msg, 9, true);
+  command[8] = control_byte;
+  
+  // Add CRC
+  this->send_message(command, 9, true);
 }
 
-void MagiqTouchClimate::send_message(uint8_t *msg_buffer, int length, bool send_crc) {
-  if (this->uart_ == nullptr) {
-    ESP_LOGW(TAG, "Cannot send message: UART not initialized");
-    return;
+void MagiqTouchComponent::send_message(uint8_t *msg_buffer, int length, bool send_crc) {
+  if (send_crc) {
+    uint16_t crc = this->modbus_crc(msg_buffer, length);
+    msg_buffer[length] = crc & 0xFF;        // CRC low byte
+    msg_buffer[length + 1] = (crc >> 8) & 0xFF;  // CRC high byte
+    length += 2;
   }
   
-  // Calculate total bytes to send
-  int total_bytes = length + (send_crc ? 2 : 0);
-  
-  // Log message being sent
-  if (esp_log_level_get(TAG) >= ESP_LOG_DEBUG) {
-    char hex_str[256];
-    int offset = 0;
-    for (int i = 0; i < length && offset < 250; i++) {
-      offset += snprintf(hex_str + offset, sizeof(hex_str) - offset, "%02X ", msg_buffer[i]);
-    }
-    if (send_crc) {
-      uint16_t crc_val = this->modbus_crc(msg_buffer, length);
-      offset += snprintf(hex_str + offset, sizeof(hex_str) - offset, "[CRC:%04X]", crc_val);
-    }
-    ESP_LOGD(TAG, "Sending message (%d bytes): %s", total_bytes, hex_str);
-  }
-  
-  // Enable RS485 transmitter
+  // Enable transmit mode
   if (this->rs485_en_pin_ != nullptr) {
     this->rs485_en_pin_->digital_write(true);
-    // RS485 transceiver enable settling time (50us is within typical 5-50us range
-    // for common transceivers like MAX485, MAX3485, SP485, etc.).
-    // This blocking delay is necessary for proper RS485 timing.
-    delayMicroseconds(50);
+    delayMicroseconds(100);  // Small delay for RS485 transceiver
   }
   
-  // Write message to UART
-  for (int i = 0; i < length; i++) {
-    this->uart_->write_byte(msg_buffer[i]);
-  }
+  // Send message
+  this->write_array(msg_buffer, length);
+  this->flush();
   
-  // Add CRC if requested
-  if (send_crc) {
-    uint16_t crc_val = this->modbus_crc(msg_buffer, length);
-    uint8_t high_byte = (crc_val >> 8) & 0xFF;
-    uint8_t low_byte = crc_val & 0xFF;
-    
-    this->uart_->write_byte(high_byte);
-    this->uart_->write_byte(low_byte);
-  }
+  // Wait for transmission to complete
+  delayMicroseconds(500);
   
-  // Flush UART
-  this->uart_->flush();
-  
-  // RS485 guard time: ensure last byte fully transmits before disabling
-  // At 9600 baud, 8N1: (total_bytes * 10 bits * 1000000 us) / 9600 baud
-  // = ~1041.67 microseconds per byte, rounded up for safety
-  uint32_t guard_time_us = (total_bytes * 10 * 1000000 + 9599) / 9600;
-  delayMicroseconds(guard_time_us);
-  
-  // Disable RS485 transmitter (back to receive)
+  // Return to receive mode
   if (this->rs485_en_pin_ != nullptr) {
     this->rs485_en_pin_->digital_write(false);
   }
+  
+  ESP_LOGV(TAG, "Sent message (%d bytes)", length);
 }
 
-uint16_t MagiqTouchClimate::modbus_crc(uint8_t *buffer, int length) {
+uint16_t MagiqTouchComponent::modbus_crc(uint8_t *buffer, int length) {
   uint8_t crc_hi = 0xFF;
   uint8_t crc_lo = 0xFF;
   
   for (int i = 0; i < length; i++) {
-    int index = crc_lo ^ buffer[i];
-    crc_lo = crc_hi ^ table_crc_hi[index];
-    crc_hi = table_crc_lo[index];
+    int index = crc_hi ^ buffer[i];
+    crc_hi = crc_lo ^ table_crc_hi[index];
+    crc_lo = table_crc_lo[index];
   }
   
-  return (crc_lo << 8) | crc_hi;
+  return (crc_hi << 8) | crc_lo;
 }
 
-bool MagiqTouchClimate::check_pattern(const uint8_t *buffer, const uint8_t *pattern, size_t length) {
+bool MagiqTouchComponent::check_pattern(const uint8_t *buffer, const uint8_t *pattern, size_t length) {
   return memcmp(buffer, pattern, length) == 0;
 }
 
-void MagiqTouchClimate::update_sensors() {
+void MagiqTouchComponent::update_sensors() {
+  // Update drain mode binary sensor
+  if (this->drain_mode_active_sensor_ != nullptr) {
+    this->drain_mode_active_sensor_->publish_state(this->drain_mode_active_);
+  }
+  
   // Update system mode text sensor
   if (this->system_mode_sensor_ != nullptr) {
-    std::string mode_text = "Unknown";
+    const char *mode_text = "Unknown";
     switch (this->system_mode_) {
       case 0: mode_text = "Fan External"; break;
       case 1: mode_text = "Fan Recycle"; break;
