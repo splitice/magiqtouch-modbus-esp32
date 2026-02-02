@@ -1,15 +1,12 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import climate, uart, sensor, binary_sensor, text_sensor, gpio
-from esphome.const import (
-    CONF_ID,
-    DEVICE_CLASS_TEMPERATURE,
-    STATE_CLASS_MEASUREMENT,
-    UNIT_CELSIUS,
-)
+from esphome.components import climate, uart, sensor, binary_sensor, text_sensor
+from esphome.const import CONF_ID
+from esphome import pins
 
-DEPENDENCIES = ["uart", "climate"]
+DEPENDENCIES = ["uart"]
 AUTO_LOAD = ["climate"]
+CODEOWNERS = ["@splitice"]
 
 magiqtouch_ns = cg.esphome_ns.namespace("magiqtouch")
 MagiqTouchClimate = magiqtouch_ns.class_("MagiqTouchClimate", climate.Climate, cg.Component)
@@ -27,7 +24,7 @@ CONFIG_SCHEMA = (
     climate.CLIMATE_SCHEMA.extend(
         {
             cv.GenerateID(): cv.declare_id(MagiqTouchClimate),
-            cv.Optional(CONF_RS485_ENABLE_PIN): cv.use_id(gpio.GPIOPin),
+            cv.Optional(CONF_RS485_ENABLE_PIN): pins.gpio_output_pin_schema,
             cv.Optional(CONF_ZONE1_TEMP_SENSOR): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_ZONE2_TEMP_SENSOR): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_THERMISTOR_TEMP_SENSOR): cv.use_id(sensor.Sensor),
