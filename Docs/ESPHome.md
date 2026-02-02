@@ -1,7 +1,5 @@
 # ESPHome Setup Guide for MagIQTouch HVAC Control
 
-# ESPHome Setup Guide for MagIQTouch HVAC Control
-
 ## ⚠️ Important Notice
 
 This ESPHome configuration is currently a **FRAMEWORK/TEMPLATE** for developers. It provides:

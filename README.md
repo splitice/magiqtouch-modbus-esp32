@@ -20,15 +20,13 @@ The Arduino firmware is **fully functional and tested** with all features workin
 
 An ESPHome configuration is provided as a **framework for developers** who want to create a native ESPHome integration. 
 
-⚠️ **Note**: The ESPHome version is currently a **template/framework** that requires a custom C++ component to be fully functional. For details on what's included and what's needed, see [ESPHome-Status.md](ESPHome-Status.md).
-
-**For production use, we recommend the Arduino firmware** with the existing [Home Assistant integration](https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha).
+⚠️ **Important**: This is currently a development framework requiring a custom C++ component. **For production, use the Arduino firmware** with the [Home Assistant integration](https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha). See [ESPHome-Status.md](ESPHome-Status.md) for details.
 
 ---
 
 ## 📋 ESPHome Framework (For Developers)
 
-The ESPHome configuration provides infrastructure and entity definitions but needs a custom component for Modbus protocol handling.
+**Status**: Framework ready for development. Requires custom C++ component for Modbus protocol.
 
 ### What's Included
 - Complete YAML configuration structure
