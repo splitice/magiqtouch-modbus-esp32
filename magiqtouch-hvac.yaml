@@ -91,7 +91,7 @@ climate:
       
       // Configure RS485 enable pin
       auto *rs485_pin = new GPIOPin();
-      rs485_pin->set_pin(GPIO${rs485_en_pin});
+      rs485_pin->set_pin(GPIO_NUM_18);  // RS485 enable pin
       rs485_pin->set_flags(gpio::FLAG_OUTPUT);
       rs485_pin->setup();
       magiqtouch_climate->set_rs485_enable_pin(rs485_pin);

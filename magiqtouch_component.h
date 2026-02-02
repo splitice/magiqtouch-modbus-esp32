@@ -865,12 +865,15 @@ class MagiqTouchClimate : public climate::Climate, public Component {
       return;
     }
     
+    // Calculate total bytes to send
+    int total_bytes = length + (send_crc ? 2 : 0);
+    
     // Enable RS485 transmitter
     if (this->rs485_en_pin_ != nullptr) {
       this->rs485_en_pin_->digital_write(true);
-      // RS485 transceiver enable settling time (typically 5-50us per datasheet)
+      // RS485 transceiver enable settling time (reduced to 50us, within datasheet range)
       // This blocking delay is necessary for proper RS485 timing
-      delayMicroseconds(500);
+      delayMicroseconds(50);
     }
     
     // Write message to both UARTs
@@ -895,9 +898,11 @@ class MagiqTouchClimate : public climate::Climate, public Component {
     this->uart_panel_->flush();
     this->uart_unit_->flush();
     
-    // RS485 guard time: wait for last bit to transmit before disabling
-    // At 9600 baud, one byte = ~1ms. This guard prevents truncation.
-    delayMicroseconds(1024);
+    // RS485 guard time: ensure last byte fully transmits before disabling
+    // At 9600 baud, 8N1: (total_bytes * 10 bits * 1000000 us) / 9600 baud
+    // Simplified: total_bytes * 1042 microseconds, rounded up for safety
+    uint32_t guard_time_us = (total_bytes * 10 * 1000000 + 9599) / 9600;
+    delayMicroseconds(guard_time_us);
     
     // Disable RS485 transmitter (back to receive)
     if (this->rs485_en_pin_ != nullptr) {
