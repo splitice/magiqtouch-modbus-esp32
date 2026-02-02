@@ -14,7 +14,7 @@ CONF_ZONE2_ENABLED_SENSOR = "zone2_enabled_sensor"
 CONF_DRAIN_MODE_ACTIVE_SENSOR = "drain_mode_active_sensor"
 CONF_SYSTEM_MODE_SENSOR = "system_mode_sensor"
 
-CONFIG_SCHEMA = climate.CLIMATE_SCHEMA.extend(
+CONFIG_SCHEMA = climate.climate_schema("magiqtouch").extend(
     {
         cv.GenerateID(): cv.declare_id(MagiqTouchClimate),
         cv.Optional(CONF_RS485_ENABLE_PIN): pins.gpio_output_pin_schema,
