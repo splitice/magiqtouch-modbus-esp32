@@ -54,13 +54,17 @@ List of available commands, where x is the value.
 | drain=x| on/off| **Drain Mode Control**<br>on = Manually trigger drain mode immediately<br>off = Cancel drain mode|
 
 ### Drain Mode:
-The drain mode feature automatically runs a 2-minute drain cycle after the cooling system has been idle for 24 hours. This helps prevent moisture buildup and mold growth in the evaporator unit.
+The drain mode feature can automatically run a 2-minute drain cycle after the cooling system has been idle for 24 hours. This helps prevent moisture buildup and mold growth in the evaporator unit.
 
-**Automatic Operation:**
+**Configuration:**
+- Set `DRAIN_ENABLE` to `true` in the code to enable automatic drain mode (default: `false`)
+- Some units manage draining themselves and don't need this feature
+
+**Automatic Operation (when `DRAIN_ENABLE` is `true`):**
 - When the cooling system (mode 2 or 3) is turned off, a 24-hour timer begins
 - If cooling is not reactivated within 24 hours, drain mode automatically runs for 2 minutes
 
-**Manual Control:**
+**Manual Control (always available):**
 - Send `drain=on` to immediately start a drain cycle
 - Send `drain=off` to cancel a running drain cycle
 - Monitor drain status via the JSON API fields listed above

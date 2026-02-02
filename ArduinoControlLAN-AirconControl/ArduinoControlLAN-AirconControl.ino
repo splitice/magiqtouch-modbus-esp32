@@ -36,6 +36,7 @@ int SerialBIndex = 0;
 bool SerialOutputModbus = false;
 
 //Drain Mode Configuration (times in milliseconds)
+#define DRAIN_ENABLE false  // Set to true to enable automatic drain mode
 #define DRAIN_TIME (2 * 60 * 1000UL)  // 2 minutes default
 #define COOL_TRANSITION_TO_DRAIN (24 * 60 * 60 * 1000UL)  // 24 hours default
 
@@ -812,8 +813,8 @@ bool UpdateDrainMode() {
   
   unsigned long currentTime = millis();
   
-  // Track when cooling mode ends
-  if ((LastSystemMode == 2 || LastSystemMode == 3) && SystemMode != 2 && SystemMode != 3) {
+  // Track when cooling mode ends (only if drain is enabled)
+  if (DRAIN_ENABLE && (LastSystemMode == 2 || LastSystemMode == 3) && SystemMode != 2 && SystemMode != 3) {
     // Just exited cooling mode
     LastCoolModeEndTime = currentTime;
     if (SerialOutputModbus) {
@@ -823,7 +824,7 @@ bool UpdateDrainMode() {
   LastSystemMode = SystemMode;
   
   // Check if drain mode should be automatically triggered
-  if (LastCoolModeEndTime != 0 && !DrainModeActive) {
+  if (DRAIN_ENABLE && LastCoolModeEndTime != 0 && !DrainModeActive) {
     unsigned long timeSinceCooling = currentTime - LastCoolModeEndTime;
     if (timeSinceCooling >= COOL_TRANSITION_TO_DRAIN) {
       DrainModeActive = true;
