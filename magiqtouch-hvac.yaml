@@ -12,8 +12,6 @@ esphome:
   comment: "MagIQTouch Modbus HVAC Controller - ESPHome Edition"
   platformio_options:
     board_build.flash_mode: dio
-  includes:
-    - magiqtouch_component.h
 
 esp32:
   board: esp32dev
@@ -65,25 +63,20 @@ uart:
     parity: NONE
     stop_bits: 1
 
-# Custom MagiqTouch Climate Component
+# MagiqTouch Climate Component
 climate:
-  - platform: custom
-    lambda: |-
-      auto magiqtouch_climate = new esphome::magiqtouch::MagiqTouchClimate();
-      magiqtouch_climate->set_uart(id(uart_modbus));
-      
-      // Configure RS485 enable pin
-      auto *rs485_pin = new GPIOPin();
-      rs485_pin->set_pin(GPIO_NUM_18);  // RS485 enable pin
-      rs485_pin->set_flags(gpio::FLAG_OUTPUT);
-      rs485_pin->setup();
-      magiqtouch_climate->set_rs485_enable_pin(rs485_pin);
-      
-      App.register_component(magiqtouch_climate);
-      return {magiqtouch_climate};
-    climates:
-      - name: "${friendly_name}"
-        id: magiqtouch_hvac
+  - platform: magiqtouch
+    name: "${friendly_name}"
+    id: magiqtouch_hvac
+    uart_id: uart_modbus
+    rs485_enable_pin: GPIO${rs485_en_pin}
+    zone1_temp_sensor: zone1_temp_sensor
+    zone2_temp_sensor: zone2_temp_sensor
+    thermistor_temp_sensor: thermistor_temp_sensor
+    zone1_enabled_sensor: zone1_enabled_sensor
+    zone2_enabled_sensor: zone2_enabled_sensor
+    drain_mode_active_sensor: drain_mode_active_sensor
+    system_mode_sensor: system_mode_sensor
 
 # Sensors from the MagiqTouch system
 sensor:
