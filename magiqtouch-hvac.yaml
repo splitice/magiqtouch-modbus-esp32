@@ -51,6 +51,9 @@ wifi:
 captive_portal:
 
 # Web server for REST API compatibility
+# The built-in ESPHome web server provides entity REST API
+# Custom HTTP handlers (get_json_status, handle_command) are available
+# in the C++ component for programmatic access
 web_server:
   port: 80
   version: 2

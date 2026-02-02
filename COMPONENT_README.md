@@ -10,6 +10,8 @@ The MagiqTouch component provides a full-featured climate control interface for 
 - Automatic drain mode after cooling cycles
 - RS485 Modbus communication with control panels and HVAC units
 - Full Home Assistant integration via ESPHome
+- **HTTP REST API for backward compatibility**
+- **Comprehensive debug logging**
 
 ## Architecture
 
@@ -27,6 +29,126 @@ The component is built as a single-header C++ class that inherits from:
 4. **Command Sending** - IoT module and control-style command generation
 5. **Drain Mode** - Automatic drain cycle after 24 hours of cooling inactivity
 6. **Dual UART** - Simultaneous RS485 communication with panel and unit
+7. **HTTP REST API** - Arduino-compatible REST endpoints
+8. **Debug Logging** - ESPHome logger integration with multiple log levels
+
+## HTTP REST API
+
+The component includes built-in HTTP API handlers for backward compatibility with the Arduino firmware:
+
+### GET / - Status Endpoint
+
+Returns JSON status of the HVAC system:
+
+```bash
+curl http://<device-ip>/
+```
+
+Response format:
+```json
+{
+  "module_name": "ESP32-HVAC-Control-ESPHome",
+  "uptime": "0d 01:23:45",
+  "system_power": 1,
+  "system_mode": 2,
+  "target_temp": 22,
+  "target_temp_zone2": 20,
+  "evap_mode": 0,
+  "evap_fanspeed": 5,
+  "heater_mode": 0,
+  "heater_fanspeed": 0,
+  "heater_therm_temp": 24,
+  "heater_zone1_enabled": 1,
+  "heater_zone2_enabled": 1,
+  "zone1_temp_sensor": 23,
+  "zone2_temp_sensor": 22,
+  "panel_command_count": 42,
+  "automatic_clean_running": 0,
+  "drain_mode_active": false,
+  "drain_time_remaining_ms": 0,
+  "time_until_next_drain_ms": 0
+}
+```
+
+### POST /command - Control Endpoint
+
+Send commands to control the HVAC system:
+
+```bash
+# Power control
+curl -X POST http://<device-ip>/command -d "power=on"
+curl -X POST http://<device-ip>/command -d "power=off"
+
+# Zone control
+curl -X POST http://<device-ip>/command -d "zone1=on"
+curl -X POST http://<device-ip>/command -d "zone2=off"
+
+# Drain mode
+curl -X POST http://<device-ip>/command -d "drain=on"
+curl -X POST http://<device-ip>/command -d "drain=off"
+
+# Fan speed (0-10)
+curl -X POST http://<device-ip>/command -d "fanspeed=7"
+
+# System mode (0=Fan Ext, 1=Fan Recycle, 2=Cooler Manual, 3=Cooler Auto, 4=Heater)
+curl -X POST http://<device-ip>/command -d "mode=2"
+
+# Temperature (10-28°C)
+curl -X POST http://<device-ip>/command -d "temp=22"
+curl -X POST http://<device-ip>/command -d "temp2=20"
+```
+
+**Note:** ESPHome's built-in web server (v2) also provides entity REST API at standard endpoints. The custom HTTP API methods (`get_json_status()`, `handle_command()`) are available for programmatic access within the component.
+
+## Debug Logging
+
+The component uses ESPHome's logging system with multiple log levels:
+
+### Log Levels
+
+- **ERROR** - Critical errors only
+- **WARN** - Warnings (CRC mismatches, buffer overflows)
+- **INFO** - Important events (mode changes, drain mode activation, HTTP API calls)
+- **DEBUG** - Detailed operation (message processing, command sends, control changes)
+- **VERBOSE** - All message traffic with hex dumps
+
+### Enable Debug Logging
+
+Edit `magiqtouch-hvac.yaml`:
+
+```yaml
+logger:
+  level: DEBUG  # or VERBOSE for maximum detail
+  baud_rate: 0  # Keep 0 to avoid UART conflicts
+```
+
+### Log Output Examples
+
+```
+[I][magiqtouch:327] HTTP API: System Power ON
+[D][magiqtouch:709] Control command: fan=5, cooler=1
+[D][magiqtouch:1035] Sending message (11 bytes): 02 10 00 31 00 01 02 00 52 [CRC:B3C4]
+[V][magiqtouch:678] Valid message received on serial 1, length 8
+[V][magiqtouch:684] Message data: EB 03 03 E4 00 05 D3 70
+[W][magiqtouch:695] CRC mismatch on serial 2: got 0x1234, expected 0x5678
+[I][magiqtouch:790] Cooling mode ended, drain timer started
+[I][magiqtouch:801] Auto-drain mode activated after 24-hour idle period
+```
+
+### Viewing Logs
+
+**Via ESPHome Dashboard:**
+- Click "LOGS" button for your device
+- Logs stream in real-time
+
+**Via ESPHome CLI:**
+```bash
+esphome logs magiqtouch-hvac.yaml
+```
+
+**Via Home Assistant:**
+- Settings → System → Logs
+- Filter by "magiqtouch"
 
 ## Component Files
 

@@ -7,6 +7,8 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/text_sensor/text_sensor.h"
+#include "esphome/components/web_server_base/web_server_base.h"
+#include "esphome/components/json/json_util.h"
 
 namespace esphome {
 namespace magiqtouch {
@@ -330,6 +332,152 @@ class MagiqTouchClimate : public climate::Climate, public Component {
     ESP_LOGI("magiqtouch", "Drain mode cancelled");
   }
 
+  // HTTP API handlers
+  std::string get_json_status() {
+    ESP_LOGD("magiqtouch", "HTTP API: Status request");
+    
+    // Get current uptime
+    uint32_t uptime_seconds = millis() / 1000;
+    uint32_t days = uptime_seconds / 86400;
+    uint32_t hours = (uptime_seconds % 86400) / 3600;
+    uint32_t minutes = (uptime_seconds % 3600) / 60;
+    uint32_t seconds = uptime_seconds % 60;
+    
+    char uptime_str[50];
+    snprintf(uptime_str, sizeof(uptime_str), "%ud %02u:%02u:%02u", days, hours, minutes, seconds);
+    
+    // Calculate drain mode times
+    uint32_t drain_time_remaining = 0;
+    uint32_t time_until_next_drain = 0;
+    uint32_t current_time = millis();
+    
+    if (this->drain_mode_active_) {
+      uint32_t elapsed = current_time - this->drain_mode_start_time_;
+      drain_time_remaining = (elapsed < DRAIN_TIME) ? (DRAIN_TIME - elapsed) : 0;
+    }
+    if (this->last_cool_mode_end_time_ != 0 && !this->drain_mode_active_) {
+      uint32_t elapsed = current_time - this->last_cool_mode_end_time_;
+      time_until_next_drain = (elapsed < COOL_TRANSITION_TO_DRAIN) ? (COOL_TRANSITION_TO_DRAIN - elapsed) : 0;
+    }
+    
+    // Build JSON response
+    std::string json = "{\n";
+    json += "  \"module_name\": \"ESP32-HVAC-Control-ESPHome\",\n";
+    json += "  \"uptime\": \"" + std::string(uptime_str) + "\",\n";
+    json += "  \"system_power\": " + std::to_string(this->system_power_info_) + ",\n";
+    json += "  \"system_mode\": " + std::to_string(this->system_mode_) + ",\n";
+    json += "  \"target_temp\": " + std::to_string(this->target_temp_info_) + ",\n";
+    json += "  \"target_temp_zone2\": " + std::to_string(this->target_temp2_info_) + ",\n";
+    json += "  \"evap_mode\": " + std::to_string(this->evap_mode_info_) + ",\n";
+    json += "  \"evap_fanspeed\": " + std::to_string(this->evap_fan_speed_info_) + ",\n";
+    json += "  \"heater_mode\": " + std::to_string(this->heater_mode_info_) + ",\n";
+    json += "  \"heater_fanspeed\": " + std::to_string(this->heater_fan_speed_info_) + ",\n";
+    json += "  \"heater_therm_temp\": " + std::to_string(this->thermistor_temp_info_) + ",\n";
+    json += "  \"heater_zone1_enabled\": " + std::to_string(this->zone1_enabled_info_) + ",\n";
+    json += "  \"heater_zone2_enabled\": " + std::to_string(this->zone2_enabled_info_) + ",\n";
+    json += "  \"zone1_temp_sensor\": " + std::to_string(this->zone1_temp_info_) + ",\n";
+    json += "  \"zone2_temp_sensor\": " + std::to_string(this->zone2_temp_info_) + ",\n";
+    json += "  \"panel_command_count\": " + std::to_string(this->command_info_) + ",\n";
+    json += "  \"automatic_clean_running\": " + std::to_string(this->automatic_clean_running_) + ",\n";
+    json += "  \"drain_mode_active\": " + std::string(this->drain_mode_active_ ? "true" : "false") + ",\n";
+    json += "  \"drain_time_remaining_ms\": " + std::to_string(drain_time_remaining) + ",\n";
+    json += "  \"time_until_next_drain_ms\": " + std::to_string(time_until_next_drain) + "\n";
+    json += "}";
+    
+    return json;
+  }
+  
+  bool handle_command(const std::string &body) {
+    ESP_LOGD("magiqtouch", "HTTP API: Command received: %s", body.c_str());
+    
+    bool handled = false;
+    
+    if (body.find("power=on") != std::string::npos) {
+      ESP_LOGI("magiqtouch", "HTTP API: System Power ON");
+      this->system_power_ = true;
+      this->system_power_info_ = true;
+      handled = true;
+    } else if (body.find("power=off") != std::string::npos) {
+      ESP_LOGI("magiqtouch", "HTTP API: System Power OFF");
+      this->system_power_ = false;
+      this->system_power_info_ = false;
+      handled = true;
+    } else if (body.find("zone1=on") != std::string::npos) {
+      ESP_LOGI("magiqtouch", "HTTP API: Zone 1 ON");
+      this->heater_zone1_ = true;
+      handled = true;
+    } else if (body.find("zone1=off") != std::string::npos) {
+      ESP_LOGI("magiqtouch", "HTTP API: Zone 1 OFF");
+      this->heater_zone1_ = false;
+      handled = true;
+    } else if (body.find("zone2=on") != std::string::npos) {
+      ESP_LOGI("magiqtouch", "HTTP API: Zone 2 ON");
+      this->heater_zone2_ = true;
+      handled = true;
+    } else if (body.find("zone2=off") != std::string::npos) {
+      ESP_LOGI("magiqtouch", "HTTP API: Zone 2 OFF");
+      this->heater_zone2_ = false;
+      handled = true;
+    } else if (body.find("drain=on") != std::string::npos) {
+      ESP_LOGI("magiqtouch", "HTTP API: Drain mode ON");
+      this->drain_mode_manual_ = true;
+      handled = true;
+    } else if (body.find("drain=off") != std::string::npos) {
+      ESP_LOGI("magiqtouch", "HTTP API: Drain mode OFF");
+      this->drain_mode_active_ = false;
+      this->drain_mode_manual_ = false;
+      handled = true;
+    } else if (body.find("fanspeed=") != std::string::npos) {
+      size_t pos = body.find("fanspeed=");
+      if (pos != std::string::npos) {
+        int speed = atoi(body.c_str() + pos + 9);
+        if (speed >= 0 && speed <= 10) {
+          ESP_LOGI("magiqtouch", "HTTP API: Fan speed = %d", speed);
+          this->fan_speed_ = speed;
+          this->evap_fan_speed_info_ = speed;
+          handled = true;
+        }
+      }
+    } else if (body.find("mode=") != std::string::npos) {
+      size_t pos = body.find("mode=");
+      if (pos != std::string::npos) {
+        int mode = atoi(body.c_str() + pos + 5);
+        if (mode >= 0 && mode <= 5) {
+          ESP_LOGI("magiqtouch", "HTTP API: System mode = %d", mode);
+          this->apply_system_mode((uint8_t)mode);
+          handled = true;
+        }
+      }
+    } else if (body.find("temp=") != std::string::npos) {
+      size_t pos = body.find("temp=");
+      if (pos != std::string::npos) {
+        int temp = atoi(body.c_str() + pos + 5);
+        if (temp >= 10 && temp <= 28) {
+          ESP_LOGI("magiqtouch", "HTTP API: Target temp = %d", temp);
+          this->target_temp_ = temp;
+          handled = true;
+        }
+      }
+    } else if (body.find("temp2=") != std::string::npos) {
+      size_t pos = body.find("temp2=");
+      if (pos != std::string::npos) {
+        int temp = atoi(body.c_str() + pos + 6);
+        if (temp >= 10 && temp <= 28) {
+          ESP_LOGI("magiqtouch", "HTTP API: Target temp zone 2 = %d", temp);
+          this->target_temp2_ = temp;
+          handled = true;
+        }
+      }
+    }
+    
+    if (handled) {
+      this->send_command_ = true;
+      this->send_command_message();
+    }
+    
+    return handled;
+  }
+
  protected:
   // UART components
   uart::UARTComponent *uart_panel_{nullptr};
@@ -529,12 +677,25 @@ class MagiqTouchClimate : public climate::Climate, public Component {
     if (crc_raw == expected_crc) {
       ESP_LOGV("magiqtouch", "Valid message received on serial %d, length %d", serial_id, msg_length);
       
+      // Log message bytes for debugging
+      if (esp_log_level_get("magiqtouch") >= ESP_LOG_VERBOSE) {
+        char hex_str[256];
+        int offset = 0;
+        for (int i = 0; i < msg_length && offset < 250; i++) {
+          offset += snprintf(hex_str + offset, sizeof(hex_str) - offset, "%02X ", msg_buffer[i]);
+        }
+        ESP_LOGV("magiqtouch", "Message data: %s", hex_str);
+      }
+      
       // Process different message types
       this->control_command_process(msg_buffer, msg_length);
       this->iot_module_message_process(msg_buffer, msg_length);
       this->panel2_info(msg_buffer, msg_length);
       
       return true;
+    } else {
+      ESP_LOGW("magiqtouch", "CRC mismatch on serial %d: got 0x%04X, expected 0x%04X", 
+               serial_id, crc_raw, expected_crc);
     }
     
     return false;
@@ -862,11 +1023,26 @@ class MagiqTouchClimate : public climate::Climate, public Component {
   
   void send_message(uint8_t *msg_buffer, int length, bool send_crc) {
     if (this->uart_panel_ == nullptr || this->uart_unit_ == nullptr) {
+      ESP_LOGW("magiqtouch", "Cannot send message: UART not initialized");
       return;
     }
     
     // Calculate total bytes to send
     int total_bytes = length + (send_crc ? 2 : 0);
+    
+    // Log message being sent
+    if (esp_log_level_get("magiqtouch") >= ESP_LOG_DEBUG) {
+      char hex_str[256];
+      int offset = 0;
+      for (int i = 0; i < length && offset < 250; i++) {
+        offset += snprintf(hex_str + offset, sizeof(hex_str) - offset, "%02X ", msg_buffer[i]);
+      }
+      if (send_crc) {
+        uint16_t crc_val = this->modbus_crc(msg_buffer, length);
+        offset += snprintf(hex_str + offset, sizeof(hex_str) - offset, "[CRC:%04X]", crc_val);
+      }
+      ESP_LOGD("magiqtouch", "Sending message (%d bytes): %s", total_bytes, hex_str);
+    }
     
     // Enable RS485 transmitter
     if (this->rs485_en_pin_ != nullptr) {
