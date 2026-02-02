@@ -5,7 +5,7 @@
 #include "NetworkSecret.h"  // Contains ssid and password definitions
 
 const char* ssid = WIFI_SSID;
-const char* password = WIFI_SECRET;  // Change this to your WiFi password
+const char* password = WIFI_PASSWORD;  // Change this to your WiFi password
 
 namespace {
   // Keep the web server responsive by never blocking in DisconnectCheck().
@@ -26,6 +26,8 @@ void LanController::Setup() {
     delay(1000);
     Serial.println("Waiting for WiFi to Connect");
   }
+  WiFi.setSleep(false);
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
