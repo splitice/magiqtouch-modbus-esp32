@@ -129,7 +129,7 @@ class MagiqTouchClimate : public climate::Climate, public Component {
     this->zone2_temp_info_ = 0;
     this->target_temp_info_ = 0;
     this->target_temp2_info_ = 0;
-    this->thermister_temp_info_ = 0;
+    this->thermistor_temp_info_ = 0;
     this->automatic_clean_running_ = 0;
     
     // IoT command variables
@@ -368,7 +368,7 @@ class MagiqTouchClimate : public climate::Climate, public Component {
   uint8_t zone2_temp_info_;
   uint8_t target_temp_info_;
   uint8_t target_temp2_info_;
-  uint8_t thermister_temp_info_;
+  uint8_t thermistor_temp_info_;
   uint8_t automatic_clean_running_;
   
   // IoT command variables
@@ -649,7 +649,7 @@ class MagiqTouchClimate : public climate::Climate, public Component {
         this->heater_fan_speed_info_ = (msg_buffer[42] & 0x0F);
         this->target_temp_info_ = msg_buffer[44];
         this->target_temp2_info_ = msg_buffer[90];
-        this->thermister_temp_info_ = msg_buffer[46];
+        this->thermistor_temp_info_ = msg_buffer[46];
         this->zone1_enabled_info_ = msg_buffer[80] & 1;
         this->zone2_enabled_info_ = (msg_buffer[80] >> 1) & 1;
         this->zone1_temp_info_ = msg_buffer[87];
