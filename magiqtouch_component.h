@@ -217,7 +217,7 @@ class MagiqTouchClimate : public climate::Climate, public Component {
   void set_heater_fan_speed_sensor(sensor::Sensor *sensor) { this->heater_fan_speed_sensor_ = sensor; }
   void set_zone1_temp_sensor(sensor::Sensor *sensor) { this->zone1_temp_sensor_ = sensor; }
   void set_zone2_temp_sensor(sensor::Sensor *sensor) { this->zone2_temp_sensor_ = sensor; }
-  void set_thermister_temp_sensor(sensor::Sensor *sensor) { this->thermister_temp_sensor_ = sensor; }
+  void set_thermistor_temp_sensor(sensor::Sensor *sensor) { this->thermistor_temp_sensor_ = sensor; }
   void set_target_temp2_sensor(sensor::Sensor *sensor) { this->target_temp2_sensor_ = sensor; }
   
   // Binary sensor setters
@@ -396,7 +396,7 @@ class MagiqTouchClimate : public climate::Climate, public Component {
   sensor::Sensor *heater_fan_speed_sensor_{nullptr};
   sensor::Sensor *zone1_temp_sensor_{nullptr};
   sensor::Sensor *zone2_temp_sensor_{nullptr};
-  sensor::Sensor *thermister_temp_sensor_{nullptr};
+  sensor::Sensor *thermistor_temp_sensor_{nullptr};
   sensor::Sensor *target_temp2_sensor_{nullptr};
   
   binary_sensor::BinarySensor *zone1_enabled_sensor_{nullptr};
@@ -868,6 +868,8 @@ class MagiqTouchClimate : public climate::Climate, public Component {
     // Enable RS485 transmitter
     if (this->rs485_en_pin_ != nullptr) {
       this->rs485_en_pin_->digital_write(true);
+      // RS485 transceiver enable settling time (typically 5-50us per datasheet)
+      // This blocking delay is necessary for proper RS485 timing
       delayMicroseconds(500);
     }
     
@@ -893,6 +895,8 @@ class MagiqTouchClimate : public climate::Climate, public Component {
     this->uart_panel_->flush();
     this->uart_unit_->flush();
     
+    // RS485 guard time: wait for last bit to transmit before disabling
+    // At 9600 baud, one byte = ~1ms. This guard prevents truncation.
     delayMicroseconds(1024);
     
     // Disable RS485 transmitter (back to receive)
@@ -917,8 +921,8 @@ class MagiqTouchClimate : public climate::Climate, public Component {
     if (this->zone2_temp_sensor_ != nullptr) {
       this->zone2_temp_sensor_->publish_state(this->zone2_temp_info_);
     }
-    if (this->thermister_temp_sensor_ != nullptr) {
-      this->thermister_temp_sensor_->publish_state(this->thermister_temp_info_);
+    if (this->thermistor_temp_sensor_ != nullptr) {
+      this->thermistor_temp_sensor_->publish_state(this->thermistor_temp_info_);
     }
     if (this->target_temp2_sensor_ != nullptr) {
       this->target_temp2_sensor_->publish_state(this->target_temp2_info_);
@@ -945,8 +949,8 @@ class MagiqTouchClimate : public climate::Climate, public Component {
     }
     
     // Update climate current temperature
-    if (this->thermister_temp_info_ > 0) {
-      this->current_temperature = this->thermister_temp_info_;
+    if (this->thermistor_temp_info_ > 0) {
+      this->current_temperature = this->thermistor_temp_info_;
     }
   }
 };

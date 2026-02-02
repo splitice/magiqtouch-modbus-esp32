@@ -59,7 +59,7 @@ The component provides a climate entity with:
 - **Modes**: Off, Fan Only, Cool, Heat
 - **Fan Modes**: Low, Medium, High, Auto
 - **Temperature Control**: 10°C - 28°C
-- **Current Temperature**: From thermister sensor
+- **Current Temperature**: From thermistor sensor
 
 ### Sensors Exposed
 
@@ -70,7 +70,7 @@ The component provides a climate entity with:
 | Heater Fan Speed | Number | Heater fan speed (0-10) |
 | Zone 1 Temperature | Temperature | Zone 1 temp sensor reading |
 | Zone 2 Temperature | Temperature | Zone 2 temp sensor reading |
-| Thermister Temperature | Temperature | Main thermister reading |
+| Thermistor Temperature | Temperature | Main thermistor reading |
 | Target Temp Zone 2 | Temperature | Zone 2 target temperature |
 | Zone 1 Enabled | Binary | Zone 1 heating status |
 | Zone 2 Enabled | Binary | Zone 2 heating status |

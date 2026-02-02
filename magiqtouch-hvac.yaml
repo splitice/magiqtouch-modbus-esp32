@@ -137,8 +137,8 @@ sensor:
     accuracy_decimals: 0
   
   - platform: template
-    name: "${friendly_name} Thermister Temperature"
-    id: thermister_temp_sensor
+    name: "${friendly_name} Thermistor Temperature"
+    id: thermistor_temp_sensor
     device_class: temperature
     unit_of_measurement: "°C"
     accuracy_decimals: 0
