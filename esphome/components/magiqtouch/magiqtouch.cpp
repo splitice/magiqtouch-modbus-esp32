@@ -158,8 +158,8 @@ void MagiqTouchComponent::process_uart() {
 bool MagiqTouchComponent::process_message(uint8_t *msg_buffer, int msg_length) {
   // Check for control command pattern (0x02 0x10...)
   if (msg_length >= 11 && msg_buffer[0] == 0x02 && msg_buffer[1] == 0x10) {
-    // Verify CRC
-    uint16_t received_crc = (msg_buffer[msg_length - 1] << 8) | msg_buffer[msg_length - 2];
+    // Verify CRC - Arduino sends HIGH byte first, then LOW byte
+    uint16_t received_crc = (msg_buffer[msg_length - 2] << 8) | msg_buffer[msg_length - 1];
     uint16_t calculated_crc = this->modbus_crc(msg_buffer, msg_length - 2);
     
     if (received_crc == calculated_crc) {
@@ -177,25 +177,31 @@ bool MagiqTouchComponent::process_message(uint8_t *msg_buffer, int msg_length) {
 void MagiqTouchComponent::control_command_process(uint8_t *msg_buffer, int msg_length) {
   if (msg_length < 11) return;
   
-  // Extract control data (bytes 7-8 contain the control payload)
+  // Extract control byte (byte 8)
   uint8_t control_byte = msg_buffer[8];
   
-  // Parse system state from control byte
-  // Bits: [7:power] [6-4:mode] [3-0:fan_speed]
-  bool power = (control_byte & 0x80) != 0;
-  uint8_t mode = (control_byte >> 4) & 0x07;
-  uint8_t fan = control_byte & 0x0F;
+  // Parse system state from control byte using Arduino logic
+  // Control byte format: (FanSpeed << 4) + modifiers
+  // modifiers: +2 for cooler mode or drain, +1 additional for drain
+  // 0x00 = power off
   
-  ESP_LOGD(TAG, "Received state - Power: %s, Mode: %d, Fan: %d", 
-           power ? "ON" : "OFF", mode, fan);
+  bool power = (control_byte != 0x00);
+  uint8_t fan = (control_byte >> 4) & 0x0F;  // Extract fan speed from upper nibble
+  uint8_t lower_nibble = control_byte & 0x0F;
   
-  // Update internal state
-  this->system_power_ = power;
-  this->system_mode_ = mode;
-  this->fan_speed_ = fan;
+  // Determine mode and drain based on lower nibble
+  // 0x00-0x01: Fan mode (External or Recycle)
+  // 0x02: Cooler mode 
+  // 0x03: Cooler mode with drain
+  bool drain_detected = (lower_nibble == 0x03 || lower_nibble == 0x01);
+  bool cooler_detected = (lower_nibble == 0x02 || lower_nibble == 0x03);
   
-  // Update sensors
-  this->update_sensors();
+  ESP_LOGD(TAG, "Received control byte: 0x%02X - Power: %s, Fan: %d, LowerNibble: 0x%01X", 
+           control_byte, power ? "ON" : "OFF", fan, lower_nibble);
+  
+  // Note: Without IoT module, we don't actually receive state updates from the system.
+  // This parsing is here for debugging/monitoring if we see messages on the bus.
+  // We primarily control state through our own commands, not by reading the bus.
 }
 
 void MagiqTouchComponent::update_drain_mode() {
@@ -224,28 +230,46 @@ void MagiqTouchComponent::update_drain_mode() {
 }
 
 void MagiqTouchComponent::send_command_control(bool drain_active) {
+  // Format: 02 02 10 00 31 00 01 02 00 XX YY YY
+  // Where XX = (FanSpeed * 16) + 2 if in cooler mode, YY YY is CRC.
+  // Drain mode uses FanSpeed + 1 (which becomes (FanSpeed+1) * 16 in the upper nibble)
+  
   uint8_t command[11];
   
-  // Copy command header
+  // Copy command header: { 0x02, 0x10, 0x00, 0x31, 0x00, 0x01, 0x02, 0x00 }
   memcpy(command, CONTROL_COMMAND_HEADER, 8);
   
-  // Build control byte
-  uint8_t control_byte = 0;
-  if (this->system_power_) control_byte |= 0x80;
-  control_byte |= (this->system_mode_ & 0x07) << 4;
-  control_byte |= (this->fan_speed_ & 0x0F);
+  // Build control byte using Arduino logic
+  const bool cooler_mode = (this->system_mode_ == 2) || (this->system_mode_ == 3);
+  uint8_t effective_fan_speed = this->fan_speed_;
   
-  command[8] = control_byte;
+  uint8_t xx = (uint8_t)(effective_fan_speed << 4);  // Fan speed in upper nibble
+  if (cooler_mode || drain_active) {
+    xx = (uint8_t)(xx + 2);  // Add 2 if cooler mode or drain
+  }
+  if (!this->system_power_) {
+    xx = 0x00;  // Power off command
+  }
   
-  // Add CRC
+  if (drain_active) {
+    xx += 1;  // Add 1 if drain active (so drain mode is +3 total in cooler)
+  }
+  
+  command[8] = xx;
+  
+  // Add CRC and send
   this->send_message(command, 9, true);
+  
+  ESP_LOGD(TAG, "Sent control command - Power: %s, Mode: %d, Fan: %d, Drain: %s, ControlByte: 0x%02X",
+           this->system_power_ ? "ON" : "OFF", this->system_mode_, this->fan_speed_,
+           drain_active ? "YES" : "NO", xx);
 }
 
 void MagiqTouchComponent::send_message(uint8_t *msg_buffer, int length, bool send_crc) {
   if (send_crc) {
     uint16_t crc = this->modbus_crc(msg_buffer, length);
-    msg_buffer[length] = (crc >> 8) & 0xFF;  // CRC high byte
-    msg_buffer[length + 1] = crc & 0xFF;        // CRC low byte
+    msg_buffer[length] = (crc >> 8) & 0xFF;     // CRC high byte first
+    msg_buffer[length + 1] = crc & 0xFF;        // CRC low byte second
     length += 2;
   }
   
