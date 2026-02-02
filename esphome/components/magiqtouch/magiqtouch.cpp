@@ -97,6 +97,23 @@ void MagiqTouchComponent::set_fan_speed(uint8_t speed) {
   this->fan_speed_ = speed;
 }
 
+void MagiqTouchComponent::set_fan_speed_str(const std::string &speed_str) {
+  auto speed_opt = parse_number<uint8_t>(speed_str);
+  if (!speed_opt.has_value()) {
+    ESP_LOGW(TAG, "Invalid fan speed string: %s", speed_str.c_str());
+    return;
+  }
+  
+  uint8_t speed = speed_opt.value();
+  if (speed > 10) {
+    ESP_LOGW(TAG, "Fan speed out of range (0-10): %d", speed);
+    return;
+  }
+  
+  ESP_LOGI(TAG, "Setting fan speed from string '%s' to %d", speed_str.c_str(), speed);
+  this->set_fan_speed(speed);
+}
+
 void MagiqTouchComponent::set_power(bool power) {
   ESP_LOGD(TAG, "Setting power to %s", power ? "ON" : "OFF");
   this->system_power_ = power;

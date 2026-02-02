@@ -35,6 +35,7 @@ class MagiqTouchComponent : public Component, public uart::UARTDevice {
 
   // Control methods (for buttons)
   void set_fan_speed(uint8_t speed);
+  void set_fan_speed_str(const std::string &speed_str);
   uint8_t get_fan_speed() const { return this->fan_speed_; }
   void set_power(bool power);
   void set_mode(uint8_t mode);

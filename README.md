@@ -275,11 +275,34 @@ select:
       - lambda: |-
           auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
           controller->set_mode_by_name(x);
+
+  # Optional: Fan Speed Selector (alternative to number slider)
+  - platform: template
+    name: "${friendly_name} Fan Speed"
+    id: fan_speed_select
+    icon: "mdi:fan"
+    options:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+      - "6"
+      - "7"
+      - "8"
+      - "9"
+      - "10"
+    optimistic: true
+    set_action:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_fan_speed_str(x);
 ```
 
 **Note:** The optional fan speed sensor and mode selector provide alternative ways to interact with the component:
 - `get_fan_speed()` - Returns the current fan speed (0-10)
 - `set_mode_by_name(string)` - Set mode using strings: "off", "fan_only", "cool", "heat"
+- `set_fan_speed_str(string)` - Set fan speed using strings: "1" to "10" (useful for select entities)
 
 ### 2. Secrets File (secrets.yaml)
 
