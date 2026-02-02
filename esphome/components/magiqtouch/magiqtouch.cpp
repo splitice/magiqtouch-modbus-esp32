@@ -216,6 +216,7 @@ void MagiqTouchComponent::update_drain_mode() {
       this->drain_mode_active_ = true;
       this->drain_mode_start_time_ = current_millis;
       this->update_sensors();
+      return;
     }
   }
   
@@ -245,7 +246,7 @@ void MagiqTouchComponent::send_command_control(bool drain_active) {
   uint8_t effective_fan_speed = this->fan_speed_;
   
   uint8_t xx = (uint8_t)(effective_fan_speed << 4);  // Fan speed in upper nibble
-  if (cooler_mode || drain_active) {
+  if (cooler_mode) {
     xx = (uint8_t)(xx + 2);  // Add 2 if cooler mode or drain
   }
   if (!this->system_power_) {
@@ -278,6 +279,9 @@ void MagiqTouchComponent::send_message(uint8_t *msg_buffer, int length, bool sen
   if (this->rs485_en_pin_ != nullptr) {
     this->rs485_en_pin_->digital_write(true);
     delayMicroseconds(100);  // Small delay for RS485 transceiver
+  } else {
+    ESP_LOGW(TAG, "RS485 EN pin not configured, cannot send message");
+    return;
   }
   
   // Send message
@@ -288,12 +292,11 @@ void MagiqTouchComponent::send_message(uint8_t *msg_buffer, int length, bool sen
   delayMicroseconds(500);
   
   // Return to receive mode
-  if (this->rs485_en_pin_ != nullptr) {
-    this->rs485_en_pin_->digital_write(false);
-  }
+  this->rs485_en_pin_->digital_write(false);
   
-  ESP_LOGV(TAG, "Sent message (%d bytes)", length);
-}
+  ESP_LOGV(TAG, "Sent message (%d bytes) with CRC: %d", length,
+           send_crc ? (uint16_t)(msg_buffer[length - 2] << 8 | msg_buffer[length - 1]) : 0);
+  }
 
 uint16_t MagiqTouchComponent::modbus_crc(uint8_t *buffer, int length) {
   uint8_t crc_hi = 0xFF;

@@ -45,7 +45,7 @@ class MagiqTouchComponent : public Component, public uart::UARTDevice {
   GPIOPin *rs485_en_pin_{nullptr};
   
   // Control variables
-  bool system_power_{true};
+  bool system_power_{false};
   uint8_t fan_speed_{5};
   uint8_t system_mode_{0};
   uint8_t target_temp_{20};
