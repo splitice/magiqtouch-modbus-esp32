@@ -11,7 +11,7 @@ namespace esphome {
 namespace magiqtouch {
 
 // Constants
-static const uint8_t MAXMSGSIZE = 256;
+static const uint8_t MAXMSGSIZE = 255;
 static const uint8_t GAPTHRESHOLD = 50;
 static const uint32_t DRAIN_TIME = 2 * 60 * 1000UL;  // 2 minutes
 static const uint32_t COOL_TRANSITION_TO_DRAIN = 24 * 60 * 60 * 1000UL;  // 24 hours
@@ -29,7 +29,7 @@ class MagiqTouchClimate : public climate::Climate, public Component {
 
   void set_uart(uart::UARTComponent *uart) { this->uart_ = uart; }
   void set_rs485_enable_pin(GPIOPin *pin) { this->rs485_en_pin_ = pin; }
-  
+  c
   // Sensor setters
   void set_zone1_temp_sensor(sensor::Sensor *sensor) { this->zone1_temp_sensor_ = sensor; }
   void set_zone2_temp_sensor(sensor::Sensor *sensor) { this->zone2_temp_sensor_ = sensor; }
