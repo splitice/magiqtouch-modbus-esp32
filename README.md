@@ -3,6 +3,601 @@
 This project is an alternative to the official WiFi Module for the MagiqTouch system.  
 It provides local access and control with a simple [REST API](Docs/Api.md).
 
+## 🚀 Quick Start
+
+### Arduino Firmware (Production-Ready - Recommended)
+
+The Arduino firmware is **fully functional and tested** with all features working:
+- Complete Modbus protocol implementation
+- REST API for control
+- Drain mode automation
+- Zone control
+- Web interface
+
+**See [Arduino IDE Setup](#arduino-ide-setup-production-ready) below for installation instructions.**
+
+### ESPHome Component (Production-Ready)
+
+A complete ESPHome component is provided with full Modbus protocol implementation and native Home Assistant integration.
+
+✅ **Production Ready**: Complete C++ component with all features implemented.
+
+See the complete example configuration below for setup instructions.
+
+---
+
+## 📋 ESPHome Component Features
+
+**Status**: Production-ready with full Modbus protocol implementation.
+
+### What's Included
+- Complete C++ Modbus protocol implementation
+- Single UART configuration for RS485
+- Native ESPHome button controls for all functions
+- Temperature sensor support
+- Drain mode automation
+- WiFi, API, and OTA support
+- Debug logging at multiple levels
+
+### Control Interface
+- Power ON/OFF buttons
+- 5 mode selection buttons (Fan External, Fan Recycle, Cooler Manual, Cooler Auto, Heater)
+- Fan speed slider (0-10)
+- Drain mode trigger/cancel buttons
+- Thermistor temperature sensor
+- System mode status display
+
+---
+
+## 📝 Complete Example Configuration
+
+Here's a **full, copy-paste ready** example configuration for using the MagIQTouch ESPHome component.
+
+### 1. Using as External Component (From GitHub)
+
+Create a file named `magiqtouch-hvac.yaml` with the following content:
+
+```yaml
+substitutions:
+  device_name: magiqtouch-hvac
+  friendly_name: MagIQTouch HVAC Control
+  
+  # Pin Configuration for WiFi Boards (ESP32 Dev Module, FireBeetle, etc.)
+  uart_rx_pin: "26"      # UART RX - connects to RS485 RO (Receiver Output)
+  uart_tx_pin: "27"      # UART TX - connects to RS485 DI (Driver Input)
+  rs485_en_pin: "18"     # RS485 DE/RE - Driver/Receiver Enable (tie together)
+  
+  # Pin Configuration for Ethernet Boards (uncomment and adjust if using ethernet)
+  # uart_rx_pin: "5"
+  # uart_tx_pin: "17"
+  # rs485_en_pin: "14"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  comment: "MagIQTouch Modbus HVAC Controller"
+
+# Use the component from this GitHub repository
+external_components:
+  - source:
+      type: git
+      url: https://github.com/splitice/magiqtouch-modbus-esp32
+      ref: main  # or specify a branch/tag
+    components: [magiqtouch]
+    refresh: 0s  # Use "always" during development to always fetch latest
+
+esp32:
+  board: esp32dev  # Change to your board type (firebeetle, esp32-s3-devkitc-1, etc.)
+  framework:
+    type: arduino
+
+# Enable logging (disable UART logging to avoid conflicts with RS485)
+logger:
+  level: INFO
+  baud_rate: 0
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+# Enable OTA updates
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# WiFi Configuration
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+  
+  # Fallback hotspot in case WiFi fails
+  ap:
+    ssid: "${device_name} Fallback"
+    password: !secret fallback_password
+
+captive_portal:
+
+# Optional: Web server for monitoring
+web_server:
+  port: 80
+  version: 2
+
+# UART Configuration for RS485 Modbus
+uart:
+  - id: uart_modbus
+    tx_pin: GPIO${uart_tx_pin}
+    rx_pin: GPIO${uart_rx_pin}
+    baud_rate: 9600
+    data_bits: 8
+    parity: NONE
+    stop_bits: 1
+
+# MagiqTouch Component
+magiqtouch:
+  - id: magiqtouch_hvac
+    uart_id: uart_modbus
+    rs485_enable_pin: GPIO${rs485_en_pin}
+    drain_mode_active_sensor: drain_mode_active_sensor
+    system_mode_sensor: system_mode_sensor
+
+# Binary Sensors
+binary_sensor:
+  - platform: template
+    name: "${friendly_name} Drain Mode Active"
+    id: drain_mode_active_sensor
+    icon: "mdi:water-pump"
+
+# System Mode Text Sensor
+text_sensor:
+  - platform: template
+    name: "${friendly_name} System Mode"
+    id: system_mode_sensor
+    icon: "mdi:air-conditioner"
+
+# Control Buttons
+button:
+  - platform: template
+    name: "${friendly_name} Power ON"
+    icon: "mdi:power"
+    on_press:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_power(true);
+  
+  - platform: template
+    name: "${friendly_name} Power OFF"
+    icon: "mdi:power-off"
+    on_press:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_power(false);
+  
+  - platform: template
+    name: "${friendly_name} Mode: Fan External"
+    icon: "mdi:fan"
+    on_press:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_mode(0);
+  
+  - platform: template
+    name: "${friendly_name} Mode: Fan Recycle"
+    icon: "mdi:fan"
+    on_press:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_mode(1);
+  
+  - platform: template
+    name: "${friendly_name} Mode: Cooler Manual"
+    icon: "mdi:snowflake"
+    on_press:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_mode(2);
+  
+  - platform: template
+    name: "${friendly_name} Mode: Cooler Auto"
+    icon: "mdi:snowflake-thermometer"
+    on_press:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_mode(3);
+  
+  - platform: template
+    name: "${friendly_name} Mode: Heater"
+    icon: "mdi:fire"
+    on_press:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_mode(4);
+  
+  - platform: template
+    name: "${friendly_name} Trigger Drain Mode"
+    icon: "mdi:water-pump"
+    on_press:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->trigger_drain_mode();
+  
+  - platform: template
+    name: "${friendly_name} Cancel Drain Mode"
+    icon: "mdi:water-pump-off"
+    on_press:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->cancel_drain_mode();
+
+# Fan Speed Control
+number:
+  - platform: template
+    name: "${friendly_name} Fan Speed"
+    id: fan_speed_number
+    icon: "mdi:fan"
+    min_value: 0
+    max_value: 10
+    step: 1
+    mode: slider
+    optimistic: true
+    set_action:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_fan_speed((uint8_t)x);
+
+# Optional: Fan Speed Sensor (read current fan speed)
+sensor:
+  - platform: template
+    name: "${friendly_name} Current Fan Speed"
+    id: current_fan_speed
+    icon: "mdi:fan"
+    unit_of_measurement: ""
+    accuracy_decimals: 0
+    lambda: |-
+      auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+      return controller->get_fan_speed();
+    update_interval: 5s
+
+# Optional: Mode Selector (alternative to individual mode buttons)
+select:
+  - platform: template
+    name: "${friendly_name} Mode"
+    id: hvac_mode_select
+    icon: "mdi:air-conditioner"
+    options:
+      - "off"
+      - "fan_only"
+      - "cool"
+      - "heat"
+    optimistic: true
+    set_action:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_mode_by_name(x);
+
+  # Optional: Fan Speed Selector (alternative to number slider)
+  - platform: template
+    name: "${friendly_name} Fan Speed"
+    id: fan_speed_select
+    icon: "mdi:fan"
+    options:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+      - "6"
+      - "7"
+      - "8"
+      - "9"
+      - "10"
+    optimistic: true
+    set_action:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_fan_speed_str(x);
+```
+
+**Note:** The optional fan speed sensor and mode selector provide alternative ways to interact with the component:
+- `get_fan_speed()` - Returns the current fan speed (0-10)
+- `set_mode_by_name(string)` - Set mode using strings: "off", "fan_only", "cool", "heat"
+- `set_fan_speed_str(string)` - Set fan speed using strings: "1" to "10" (useful for select entities)
+
+#### Reading Current State
+
+You can read the current system state using getter methods in lambda expressions:
+
+```yaml
+# Read current fan speed
+sensor:
+  - platform: template
+    name: "${friendly_name} Current Fan Speed"
+    lambda: |-
+      auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+      return controller->get_fan_speed();
+    update_interval: 5s
+
+# Read current mode as text
+text_sensor:
+  - platform: template
+    name: "${friendly_name} Current Mode"
+    lambda: |-
+      auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+      return controller->get_mode_name();
+    update_interval: 5s
+
+# Read power state
+binary_sensor:
+  - platform: template
+    name: "${friendly_name} Power State"
+    lambda: |-
+      auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+      return controller->get_power();
+    update_interval: 5s
+
+# Synchronized mode select (shows current value)
+select:
+  - platform: template
+    name: "${friendly_name} Mode Control"
+    options:
+      - "off"
+      - "fan_only"
+      - "cool"
+      - "heat"
+    lambda: |-
+      auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+      return controller->get_mode_name();
+    set_action:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_mode_by_name(x);
+    update_interval: 5s
+
+# Synchronized fan speed select (shows current value)
+select:
+  - platform: template
+    name: "${friendly_name} Fan Speed Control"
+    options:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+      - "6"
+      - "7"
+      - "8"
+      - "9"
+      - "10"
+    lambda: |-
+      auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+      return to_string(controller->get_fan_speed());
+    set_action:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_fan_speed_str(x);
+    update_interval: 5s
+```
+
+**Available getter methods:**
+- `get_fan_speed()` - Returns current fan speed (0-10)
+- `get_mode()` - Returns current mode number (0-4)
+- `get_mode_name()` - Returns current mode as string ("off", "fan_only", "cool", "heat")
+- `get_power()` - Returns power state (true/false)
+
+### 2. Secrets File (secrets.yaml)
+
+Create a file named `secrets.yaml` in the same directory:
+
+```yaml
+# WiFi Credentials
+wifi_ssid: "YourWiFiSSID"
+wifi_password: "YourWiFiPassword"
+
+# API Encryption Key (generate with: openssl rand -base64 32)
+api_encryption_key: "your-32-character-base64-key-here=="
+
+# OTA Update Password
+ota_password: "your-secure-ota-password"
+
+# Fallback AP Password (used when WiFi fails)
+fallback_password: "fallback-ap-password"
+```
+
+### 3. Pin Wiring Guide
+
+Connect your ESP32 to the RS485 module(s):
+
+| ESP32 Pin | RS485 Module | Description |
+|-----------|--------------|-------------|
+| GPIO26 | RO | UART RX - Receiver Output from RS485 |
+| GPIO27 | DI | UART TX - Driver Input to RS485 |
+| GPIO18 | DE & RE | Enable pin (tie DE and RE together) |
+| 3.3V | VCC | Power for RS485 module |
+| GND | GND | Ground |
+
+**RS485 Module to RJ45 (MagIQTouch System):**
+
+| RS485 Module | RJ45 Wire (A Wiring) | Purpose |
+|--------------|---------------------|---------|
+| A | Solid Blue | Modbus A |
+| B | Orange/White | Modbus B |
+| GND | Brown/White, Blue/White | Ground |
+| 5V* | Solid Green, Solid Orange | Power (control panel only) |
+
+*Note: 5V power is only needed for the control panel connection, not the system board.
+
+### 4. Using Local Component (Development)
+
+If you've cloned this repository locally, use this instead of `external_components`:
+
+```yaml
+external_components:
+  - source:
+      type: local
+      path: /path/to/magiqtouch-modbus-esp32  # Path to cloned repo
+    components: [magiqtouch]
+```
+
+### 5. Board-Specific Configurations
+
+#### FireBeetle ESP32 (DFRobot)
+```yaml
+esp32:
+  board: firebeetle32
+  framework:
+    type: arduino
+```
+
+#### Generic ESP32 Development Board
+```yaml
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+```
+
+#### ESP32-S3 DevKitC-1
+```yaml
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: arduino
+```
+
+#### Ethernet Boards - Pin Adjustments
+For ethernet-based ESP32 boards, change the pin substitutions:
+
+```yaml
+substitutions:
+  uart_rx_pin: "5"       # Different pin for ethernet boards
+  uart_tx_pin: "17"      # Different pin for ethernet boards
+  rs485_en_pin: "14"     # Different pin for ethernet boards
+```
+
+### 6. Installation Commands
+
+**Using ESPHome CLI:**
+```bash
+# Install ESPHome
+pip3 install esphome
+
+# Compile and flash (first time via USB)
+esphome run magiqtouch-hvac.yaml
+
+# Update over-the-air (after initial flash)
+esphome run magiqtouch-hvac.yaml --device <device-ip>
+```
+
+**Using Home Assistant ESPHome Dashboard:**
+1. Install ESPHome add-on from Add-on Store
+2. Open ESPHome dashboard
+3. Click "+ NEW DEVICE"
+4. Copy-paste the configuration above
+5. Update secrets.yaml with your credentials
+6. Click "INSTALL" and follow prompts
+
+### 7. Troubleshooting
+
+**Device not responding:**
+- Check UART wiring (RX, TX, Enable pin)
+- Verify RS485 A/B connections
+- Enable VERBOSE logging: `logger: level: VERBOSE`
+
+**CRC errors in logs:**
+- Double-check RS485 A and B wiring (may be swapped)
+- Ensure RS485 DE and RE are tied together
+- Check ground connections
+
+**Cannot connect to WiFi:**
+- Use the fallback AP: Connect to "magiqtouch-hvac Fallback" network
+- Default password is in your secrets.yaml
+- Access device at 192.168.4.1
+
+**Enable detailed logging:**
+```yaml
+logger:
+  level: VERBOSE  # Shows all Modbus messages with hex dumps
+  baud_rate: 0
+```
+
+---
+
+### ESPHome Prerequisites
+- Home Assistant with ESPHome add-on installed, OR
+- ESPHome CLI installed on your computer
+- ESP32 development board (see [Hardware List](Docs/HardwareList.md))
+- USB cable for flashing
+
+### ESPHome Setup Steps
+
+1. **Prepare your secrets file:**
+   - Copy `secrets.yaml.example` to `secrets.yaml`
+   - Edit `secrets.yaml` with your WiFi credentials and passwords
+   ```yaml
+   wifi_ssid: "YourWiFiSSID"
+   wifi_password: "YourWiFiPassword"
+   api_encryption_key: "generate-with-openssl-rand-base64-32"
+   ota_password: "choose-a-secure-password"
+   fallback_password: "fallback-ap-password"
+   ```
+
+2. **Install ESPHome (if not using Home Assistant):**
+   ```bash
+   pip3 install esphome
+   ```
+
+3. **Compile and flash the firmware:**
+   
+   **Option A - Using Home Assistant ESPHome Dashboard:**
+   - Open Home Assistant
+   - Go to Settings → Add-ons → ESPHome
+   - Click "Open Web UI"
+   - Click "+ NEW DEVICE" → "CONTINUE" → "SKIP"
+   - Enter a name (e.g., "magiqtouch-hvac")
+   - Click "SKIP" installation
+   - Replace the generated YAML content with the contents of `magiqtouch-hvac.yaml`
+   - Click "INSTALL" → "Plug into this computer"
+   - Follow the on-screen instructions to flash
+
+   **Option B - Using ESPHome CLI:**
+   ```bash
+   # First time flash (device connected via USB)
+   esphome run magiqtouch-hvac.yaml
+   
+   # Subsequent updates can be done over-the-air (OTA)
+   esphome run magiqtouch-hvac.yaml --device <device-ip-address>
+   ```
+
+4. **Add to Home Assistant:**
+   - After flashing, the device should appear automatically in Home Assistant
+   - Go to Settings → Devices & Services
+   - Look for "ESPHome" and click "CONFIGURE"
+   - Enter the encryption key from your `secrets.yaml`
+   - The device will be added with all climate controls and sensors
+
+5. **Wire the hardware:**
+   - Follow the wiring diagram below (same as Arduino version)
+
+### ESPHome Pin Configuration
+
+The default pin configuration for WiFi boards is:
+- UART1 (Panel): RX=GPIO26, TX=GPIO27
+- UART2 (Unit): RX=GPIO16, TX=GPIO17
+- RS485 Enable: GPIO18
+
+For ethernet boards, adjust the pin substitutions in `magiqtouch-hvac.yaml`:
+```yaml
+substitutions:
+  serial1_rx_pin: "5"
+  serial1_tx_pin: "17"
+  serial2_rx_pin: "14"
+  serial2_tx_pin: "15"
+```
+
+### 📚 Detailed ESPHome Documentation
+For complete setup instructions, troubleshooting, and advanced configuration, see the **[ESPHome Setup Guide](Docs/ESPHome.md)**.
+
 ### Home Assistant Integration: 
 [https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha](https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha)
 
@@ -11,6 +606,12 @@ It provides local access and control with a simple [REST API](Docs/Api.md).
 ### Hardware List: [Link](Docs/HardwareList.md)
 
 ### API Documentation: [Link](Docs/Api.md)
+
+---
+
+## Arduino IDE Setup (Production-Ready)
+
+The Arduino-based firmware is **fully functional and recommended for production use**. It's available in the `ArduinoControlLAN-AirconControl` folder.
 
 ### Configuration Steps:
 - Download and Install [Arduino IDE](https://www.arduino.cc/en/software/)
