@@ -244,8 +244,8 @@ void MagiqTouchComponent::send_command_control(bool drain_active) {
 void MagiqTouchComponent::send_message(uint8_t *msg_buffer, int length, bool send_crc) {
   if (send_crc) {
     uint16_t crc = this->modbus_crc(msg_buffer, length);
-    msg_buffer[length] = crc & 0xFF;        // CRC low byte
-    msg_buffer[length + 1] = (crc >> 8) & 0xFF;  // CRC high byte
+    msg_buffer[length] = (crc >> 8) & 0xFF;  // CRC high byte
+    msg_buffer[length + 1] = crc & 0xFF;        // CRC low byte
     length += 2;
   }
   
