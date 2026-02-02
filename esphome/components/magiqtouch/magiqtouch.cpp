@@ -98,6 +98,8 @@ void MagiqTouchComponent::set_fan_speed(uint8_t speed) {
 void MagiqTouchComponent::set_power(bool power) {
   ESP_LOGD(TAG, "Setting power to %s", power ? "ON" : "OFF");
   this->system_power_ = power;
+
+  this->update_sensors();
 }
 
 void MagiqTouchComponent::set_mode(uint8_t mode) {
@@ -109,6 +111,8 @@ void MagiqTouchComponent::set_mode(uint8_t mode) {
     this->last_cool_mode_end_time_ = millis();
   }
   this->last_system_mode_ = mode;
+
+  this->update_sensors();
 }
 
 void MagiqTouchComponent::trigger_drain_mode() {
@@ -324,18 +328,22 @@ void MagiqTouchComponent::update_sensors() {
   // Update system mode text sensor
   if (this->system_mode_sensor_ != nullptr) {
     const char *mode_text = "Unknown";
-    switch (this->system_mode_) {
-      case 0:
-      case 1:
-        mode_text = "fan_only";
-        break;
-      case 2:
-      case 3:
-        mode_text = "cool";
-        break;
-      case 4:
-        mode_text = "heat"; 
-        break;
+    if(!this->system_power_) {
+      mode_text = "off";
+    } else {
+      switch (this->system_mode_) {
+        case 0:
+        case 1:
+          mode_text = "fan_only";
+          break;
+        case 2:
+        case 3:
+          mode_text = "cool";
+          break;
+        case 4:
+          mode_text = "heat"; 
+          break;
+      }
     }
     this->system_mode_sensor_->publish_state(mode_text);
   }
