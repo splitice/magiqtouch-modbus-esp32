@@ -3,11 +3,50 @@
 This project is an alternative to the official WiFi Module for the MagiqTouch system.  
 It provides local access and control with a simple [REST API](Docs/Api.md).
 
-## 🚀 Quick Start - ESPHome (Recommended)
+# MagIQTouch Modbus
 
-**NEW!** This project is now available as an ESPHome configuration for seamless Home Assistant integration.
+This project is an alternative to the official WiFi Module for the MagiqTouch system.  
+It provides local access and control with a simple [REST API](Docs/Api.md).
 
-### Prerequisites
+## 🚀 Quick Start
+
+### Arduino Firmware (Production-Ready - Recommended)
+
+The Arduino firmware is **fully functional and tested** with all features working:
+- Complete Modbus protocol implementation
+- REST API for control
+- Drain mode automation
+- Zone control
+- Web interface
+
+**See [Arduino IDE Setup](#arduino-ide-setup-production-ready) below for installation instructions.**
+
+### ESPHome Configuration (Framework/Template)
+
+An ESPHome configuration is provided as a **framework for developers** who want to create a native ESPHome integration. 
+
+⚠️ **Note**: The ESPHome version is currently a **template/framework** that requires a custom C++ component to be fully functional. For details on what's included and what's needed, see [ESPHome-Status.md](ESPHome-Status.md).
+
+**For production use, we recommend the Arduino firmware** with the existing [Home Assistant integration](https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha).
+
+---
+
+## 📋 ESPHome Framework (For Developers)
+
+The ESPHome configuration provides infrastructure and entity definitions but needs a custom component for Modbus protocol handling.
+
+### What's Included
+- Complete YAML configuration structure
+- WiFi, API, and OTA setup
+- UART configuration for RS485
+- Entity definitions (Climate, Sensors, Switches)
+- Pin configuration templates
+
+### What's Needed
+- Custom C++ component (~1000 lines) to handle MagIQTouch Modbus protocol
+- See [ESPHome-Status.md](ESPHome-Status.md) for implementation details
+
+### ESPHome Prerequisites
 - Home Assistant with ESPHome add-on installed, OR
 - ESPHome CLI installed on your computer
 - ESP32 development board (see [Hardware List](Docs/HardwareList.md))
@@ -93,9 +132,9 @@ For complete setup instructions, troubleshooting, and advanced configuration, se
 
 ---
 
-## Arduino IDE Setup (Legacy Method)
+## Arduino IDE Setup (Production-Ready)
 
-The original Arduino-based firmware is still available in the `ArduinoControlLAN-AirconControl` folder.
+The Arduino-based firmware is **fully functional and recommended for production use**. It's available in the `ArduinoControlLAN-AirconControl` folder.
 
 ### Configuration Steps:
 - Download and Install [Arduino IDE](https://www.arduino.cc/en/software/)

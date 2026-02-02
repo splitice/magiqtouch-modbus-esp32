@@ -1,8 +1,25 @@
 # ESPHome Setup Guide for MagIQTouch HVAC Control
 
+# ESPHome Setup Guide for MagIQTouch HVAC Control
+
+## ⚠️ Important Notice
+
+This ESPHome configuration is currently a **FRAMEWORK/TEMPLATE** for developers. It provides:
+- Complete infrastructure (WiFi, UART, pins, OTA)
+- Entity structure and definitions
+- Configuration ready for custom component integration
+
+**What's Missing**: A custom C++ component (~1000 lines) to implement the MagIQTouch Modbus protocol.
+
+**For production use**, please use the [Arduino firmware](../ArduinoControlLAN-AirconControl/) with the [Home Assistant integration](https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha).
+
+For implementation details, see [ESPHome-Status.md](../ESPHome-Status.md).
+
+---
+
 ## Overview
 
-The ESPHome version of this project provides native Home Assistant integration with the MagIQTouch HVAC system. It offers:
+When completed, the ESPHome version will provide native Home Assistant integration with the MagIQTouch HVAC system. The framework includes:
 
 - **Native Home Assistant Integration**: Automatic discovery and configuration
 - **Climate Entity**: Full HVAC control through Home Assistant's climate interface
@@ -12,9 +29,9 @@ The ESPHome version of this project provides native Home Assistant integration w
 - **OTA Updates**: Update firmware wirelessly after initial flash
 - **Web Interface**: Built-in web server for status monitoring
 
-## What's Included
+## Framework Structure
 
-The ESPHome configuration provides the following entities in Home Assistant:
+The ESPHome configuration provides the following entity framework:
 
 ### Climate Control
 - **Climate Entity**: Main HVAC control with temperature, mode, and fan settings

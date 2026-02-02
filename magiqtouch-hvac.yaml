@@ -14,6 +14,13 @@ esphome:
   comment: "MagIQTouch Modbus HVAC Controller - ESPHome Edition"
   platformio_options:
     board_build.flash_mode: dio
+  
+  # NOTE: This configuration is a FRAMEWORK/TEMPLATE
+  # A custom C++ component is needed to implement the MagIQTouch Modbus protocol.
+  # See ESPHome-Status.md for details on implementation status.
+  # 
+  # For a working solution today, use the Arduino firmware in ArduinoControlLAN-AirconControl/
+  # with the Home Assistant integration: https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha
 
 esp32:
   board: esp32dev
