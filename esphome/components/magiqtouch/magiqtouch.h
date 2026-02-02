@@ -2,7 +2,6 @@
 
 #include "esphome/core/component.h"
 #include "esphome/components/uart/uart.h"
-#include "esphome/components/sensor/sensor.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/text_sensor/text_sensor.h"
 
@@ -27,9 +26,6 @@ class MagiqTouchComponent : public Component, public uart::UARTDevice {
   float get_setup_priority() const override { return setup_priority::DATA; }
 
   void set_rs485_enable_pin(GPIOPin *pin) { this->rs485_en_pin_ = pin; }
-  
-  // Sensor setters
-  void set_thermistor_temp_sensor(sensor::Sensor *sensor) { this->thermistor_temp_sensor_ = sensor; }
   
   // Binary sensor setters
   void set_drain_mode_active_sensor(binary_sensor::BinarySensor *sensor) { this->drain_mode_active_sensor_ = sensor; }
@@ -69,9 +65,6 @@ class MagiqTouchComponent : public Component, public uart::UARTDevice {
   uint8_t serial_buffer_[MAXMSGSIZE];
   int serial_index_{0};
   uint32_t previous_millis_{0};
-  
-  // Sensor pointers
-  sensor::Sensor *thermistor_temp_sensor_{nullptr};
   
   // Binary sensor pointers
   binary_sensor::BinarySensor *drain_mode_active_sensor_{nullptr};

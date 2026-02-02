@@ -139,18 +139,8 @@ magiqtouch:
   - id: magiqtouch_hvac
     uart_id: uart_modbus
     rs485_enable_pin: GPIO${rs485_en_pin}
-    thermistor_temp_sensor: thermistor_temp_sensor
     drain_mode_active_sensor: drain_mode_active_sensor
     system_mode_sensor: system_mode_sensor
-
-# Temperature Sensor
-sensor:
-  - platform: template
-    name: "${friendly_name} Thermistor Temperature"
-    id: thermistor_temp_sensor
-    device_class: temperature
-    unit_of_measurement: "°C"
-    accuracy_decimals: 0
 
 # Binary Sensors
 binary_sensor:

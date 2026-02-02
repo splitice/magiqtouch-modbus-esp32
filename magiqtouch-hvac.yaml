@@ -80,12 +80,11 @@ uart:
     parity: NONE
     stop_bits: 1
 
-# MagiqTouch Component (simplified - no climate)
+# MagiqTouch Component (simplified - no climate, no IoT temp sensors)
 magiqtouch:
   id: magiqtouch_controller
   uart_id: uart_modbus
   rs485_enable_pin: GPIO${rs485_en_pin}
-  thermistor_temp_sensor: thermistor_temp_sensor
   drain_mode_active_sensor: drain_mode_active_sensor
   system_mode_sensor: system_mode_sensor
 
