@@ -3,6 +3,85 @@
 This project is an alternative to the official WiFi Module for the MagiqTouch system.  
 It provides local access and control with a simple [REST API](Docs/Api.md).
 
+## 🚀 Quick Start - ESPHome (Recommended)
+
+**NEW!** This project is now available as an ESPHome configuration for seamless Home Assistant integration.
+
+### Prerequisites
+- Home Assistant with ESPHome add-on installed, OR
+- ESPHome CLI installed on your computer
+- ESP32 development board (see [Hardware List](Docs/HardwareList.md))
+- USB cable for flashing
+
+### ESPHome Setup Steps
+
+1. **Prepare your secrets file:**
+   - Copy `secrets.yaml.example` to `secrets.yaml`
+   - Edit `secrets.yaml` with your WiFi credentials and passwords
+   ```yaml
+   wifi_ssid: "YourWiFiSSID"
+   wifi_password: "YourWiFiPassword"
+   api_encryption_key: "generate-with-openssl-rand-base64-32"
+   ota_password: "choose-a-secure-password"
+   fallback_password: "fallback-ap-password"
+   ```
+
+2. **Install ESPHome (if not using Home Assistant):**
+   ```bash
+   pip3 install esphome
+   ```
+
+3. **Compile and flash the firmware:**
+   
+   **Option A - Using Home Assistant ESPHome Dashboard:**
+   - Open Home Assistant
+   - Go to Settings → Add-ons → ESPHome
+   - Click "Open Web UI"
+   - Click "+ NEW DEVICE" → "CONTINUE" → "SKIP"
+   - Enter a name (e.g., "magiqtouch-hvac")
+   - Click "SKIP" installation
+   - Replace the generated YAML content with the contents of `magiqtouch-hvac.yaml`
+   - Click "INSTALL" → "Plug into this computer"
+   - Follow the on-screen instructions to flash
+
+   **Option B - Using ESPHome CLI:**
+   ```bash
+   # First time flash (device connected via USB)
+   esphome run magiqtouch-hvac.yaml
+   
+   # Subsequent updates can be done over-the-air (OTA)
+   esphome run magiqtouch-hvac.yaml --device <device-ip-address>
+   ```
+
+4. **Add to Home Assistant:**
+   - After flashing, the device should appear automatically in Home Assistant
+   - Go to Settings → Devices & Services
+   - Look for "ESPHome" and click "CONFIGURE"
+   - Enter the encryption key from your `secrets.yaml`
+   - The device will be added with all climate controls and sensors
+
+5. **Wire the hardware:**
+   - Follow the wiring diagram below (same as Arduino version)
+
+### ESPHome Pin Configuration
+
+The default pin configuration for WiFi boards is:
+- UART1 (Panel): RX=GPIO26, TX=GPIO27
+- UART2 (Unit): RX=GPIO16, TX=GPIO17
+- RS485 Enable: GPIO18
+
+For ethernet boards, adjust the pin substitutions in `magiqtouch-hvac.yaml`:
+```yaml
+substitutions:
+  serial1_rx_pin: "5"
+  serial1_tx_pin: "17"
+  serial2_rx_pin: "14"
+  serial2_tx_pin: "15"
+```
+
+### 📚 Detailed ESPHome Documentation
+For complete setup instructions, troubleshooting, and advanced configuration, see the **[ESPHome Setup Guide](Docs/ESPHome.md)**.
+
 ### Home Assistant Integration: 
 [https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha](https://github.com/mrhteriyaki/magiqtouch-modbus-esp32-ha)
 
@@ -11,6 +90,12 @@ It provides local access and control with a simple [REST API](Docs/Api.md).
 ### Hardware List: [Link](Docs/HardwareList.md)
 
 ### API Documentation: [Link](Docs/Api.md)
+
+---
+
+## Arduino IDE Setup (Legacy Method)
+
+The original Arduino-based firmware is still available in the `ArduinoControlLAN-AirconControl` folder.
 
 ### Configuration Steps:
 - Download and Install [Arduino IDE](https://www.arduino.cc/en/software/)
