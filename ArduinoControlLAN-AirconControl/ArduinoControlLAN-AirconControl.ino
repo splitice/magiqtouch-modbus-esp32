@@ -36,7 +36,7 @@ int SerialBIndex = 0;
 bool SerialOutputModbus = false;
 
 //Drain Mode Configuration (times in milliseconds)
-#define DRAIN_ENABLE false  // Set to true to enable automatic drain mode
+const bool DRAIN_ENABLE = false;  // Set to true to enable automatic drain mode
 #define DRAIN_TIME (2 * 60 * 1000UL)  // 2 minutes default
 #define COOL_TRANSITION_TO_DRAIN (24 * 60 * 60 * 1000UL)  // 24 hours default
 
