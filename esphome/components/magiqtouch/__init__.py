@@ -8,3 +8,6 @@ magiqtouch_ns = cg.esphome_ns.namespace("magiqtouch")
 MagiqTouchClimate = magiqtouch_ns.class_("MagiqTouchClimate", climate.Climate, cg.Component)
 
 CONFIG_SCHEMA = cv.Schema({})
+
+# Export symbols for use by platform modules
+__all__ = ["magiqtouch_ns", "MagiqTouchClimate"]
