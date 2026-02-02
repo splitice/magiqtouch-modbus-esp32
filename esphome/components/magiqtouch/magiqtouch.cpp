@@ -71,6 +71,8 @@ void MagiqTouchComponent::setup() {
     this->rs485_en_pin_->pin_mode(gpio::FLAG_OUTPUT);
     this->rs485_en_pin_->digital_write(false);  // Receiving mode by default
   }
+
+  this->update_sensors();
   
   ESP_LOGD(TAG, "MagIQTouch component setup complete");
 }
