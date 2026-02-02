@@ -117,6 +117,29 @@ void MagiqTouchComponent::set_mode(uint8_t mode) {
   this->update_sensors();
 }
 
+void MagiqTouchComponent::set_mode_by_name(const std::string &mode_name) {
+  ESP_LOGI(TAG, "Setting mode by name: %s", mode_name.c_str());
+  
+  if (mode_name == "off") {
+    this->set_power(false);
+  } else if (mode_name == "fan_only") {
+    this->set_power(true);
+    this->set_mode(0);  // Fan External mode
+  } else if (mode_name == "cool") {
+    this->set_power(true);
+    this->set_mode(2);  // Cooler Manual mode
+  } else if (mode_name == "heat") {
+    this->set_power(true);
+    this->set_mode(4);  // Heater mode
+  } else {
+    ESP_LOGW(TAG, "Unknown mode name: %s", mode_name.c_str());
+    return;
+  }
+  
+  // Send the control command immediately
+  this->send_command_control(this->drain_mode_active_);
+}
+
 void MagiqTouchComponent::trigger_drain_mode() {
   ESP_LOGI(TAG, "Drain mode triggered manually");
   this->drain_mode_manual_ = true;

@@ -245,7 +245,41 @@ number:
       - lambda: |-
           auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
           controller->set_fan_speed((uint8_t)x);
+
+# Optional: Fan Speed Sensor (read current fan speed)
+sensor:
+  - platform: template
+    name: "${friendly_name} Current Fan Speed"
+    id: current_fan_speed
+    icon: "mdi:fan"
+    unit_of_measurement: ""
+    accuracy_decimals: 0
+    lambda: |-
+      auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+      return controller->get_fan_speed();
+    update_interval: 5s
+
+# Optional: Mode Selector (alternative to individual mode buttons)
+select:
+  - platform: template
+    name: "${friendly_name} Mode"
+    id: hvac_mode_select
+    icon: "mdi:air-conditioner"
+    options:
+      - "off"
+      - "fan_only"
+      - "cool"
+      - "heat"
+    optimistic: true
+    set_action:
+      - lambda: |-
+          auto controller = (esphome::magiqtouch::MagiqTouchComponent*)id(magiqtouch_hvac);
+          controller->set_mode_by_name(x);
 ```
+
+**Note:** The optional fan speed sensor and mode selector provide alternative ways to interact with the component:
+- `get_fan_speed()` - Returns the current fan speed (0-10)
+- `set_mode_by_name(string)` - Set mode using strings: "off", "fan_only", "cool", "heat"
 
 ### 2. Secrets File (secrets.yaml)
 
