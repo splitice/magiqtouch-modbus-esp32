@@ -14,7 +14,7 @@ namespace magiqtouch {
 // Constants
 static const uint8_t MAXMSGSIZE = 256;
 static const uint8_t GAPTHRESHOLD = 50;
-static const uint32_t DRAIN_TIME = 2 * 60 * 1000UL;  // 2 minutes
+static const uint32_t DRAIN_TIME = 2 * 24 * 60 * 60 * 1000UL;  // 2 days
 static const uint32_t COOL_TRANSITION_TO_DRAIN = 24 * 60 * 60 * 1000UL;  // 24 hours
 
 // CRC Lookup Tables (Modbus CRC-16)

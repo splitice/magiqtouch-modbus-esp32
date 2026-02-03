@@ -125,6 +125,11 @@ void MagiqTouchComponent::set_mode(uint8_t mode) {
   ESP_LOGD(TAG, "Setting mode to %d", mode);
   this->system_mode_ = mode;
   
+  if(mode == 2) {  // If entering cool mode, end drain
+    this->drain_mode_active_ = false;
+    this->drain_mode_manual_ = false;
+  }
+  
   // Track when cooling mode ends for drain mode automation
   if (this->last_system_mode_ == 2 && mode != 2) {  // Exiting cool mode
     this->last_cool_mode_end_time_ = millis();
